@@ -1,0 +1,11 @@
+__pycache__/
+src/data/dataset/*
+!src/data/dataset/tokenizer
+src/data/database
+src/data/metadata
+checkpoints
+src/training/logs/*
+log.md
+inference_output.txt
+.conda
+tests
