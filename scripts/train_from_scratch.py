@@ -10,14 +10,14 @@ from src.data import DataSampler, clean_data, preprocess
 from src.train import train
 
 def sample():
-    BASE_DATABASE_DIR = r'D:\Axon\ANN\llm\vv\src\data\database'
-    METADATA_ROOT_DIR = r'D:\Axon\ANN\llm\vv\src\data\metadata'
+    BASE_DATABASE_DIR = os.path.join(src_path, 'data', 'database')
+    METADATA_ROOT_DIR = os.path.join(src_path, 'data', 'metadata')
     sampler = DataSampler(BASE_DATABASE_DIR, METADATA_ROOT_DIR)
     sampler.sample_wudao(target_gb=0.5, split_size_mb=20)
     sampler.sample_novel(target_gb=0.5, split_size_mb=20)
     sampler.sample_pretrain_minimind(target_gb=0.5, split_size_mb=20)
 
-    sampler.sample_sft512(target_gb=0.2, split_size_mb=20)
+    sampler.sample_sft(target_gb=0.2, split_size_mb=20)
     # sampler.sample_firefly(target_gb=0.1, split_size_mb=20)
     sampler.sample_chat(target_gb=0.2, split_size_mb=20)
 
@@ -26,28 +26,23 @@ def delete_data(paths_to_delete):
     删除训练过程中生成的日志、检查点以及处理后的数据集
     """
     for path in paths_to_delete:
-        if os.path.exists(path):
-            print(f"正在删除: {path}")
-            try:
-                if os.path.isdir(path):
-                    shutil.rmtree(path)
-                else:
-                    os.remove(path)
-                print(f"成功删除: {path}")
-            except Exception as e:
-                print(f"删除 {path} 时出错: {e}")
-        else:
-            print(f"路径不存在，跳过: {path}")
+        if not os.path.exists(path): continue
+        print(f"正在删除: {path}")
+        try:
+            shutil.rmtree(path) if os.path.isdir(path) else os.remove(path)
+            print(f"成功删除: {path}")
+        except Exception as e:
+            print(f"删除 {path} 时出错: {e}")
 
+paths_to_delete = [
+    os.path.join(root_path, 'models', 'logs'),
+    os.path.join(root_path, 'models', 'checkpoints'),
+    os.path.join(src_path, 'data', 'dataset', 'pretrain'),
+    os.path.join(src_path, 'data', 'dataset', 'finetune'),
+    os.path.join(src_path, 'data', 'metadata')
+]
 
 if __name__ == "__main__":
-    paths_to_delete = [
-        r'D:\Axon\ANN\llm\vv\src\training\logs',
-        r'D:\Axon\ANN\llm\vv\src\training\checkpoints',
-        r'D:\Axon\ANN\llm\vv\src\data\dataset\pretrain',
-        r'D:\Axon\ANN\llm\vv\src\data\dataset\finetune',
-        r'D:\Axon\ANN\llm\vv\src\data\metadata'
-    ]
     delete_data(paths_to_delete) # 如果需要清空数据，取消此行注释
     # clean_data()
     sample()

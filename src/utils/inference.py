@@ -17,6 +17,7 @@ def load_model(model_dir, device='cuda' if torch.cuda.is_available() else 'cpu')
     """
     加载模型和分词器
     """
+    if not os.path.exists(model_dir): raise FileNotFoundError(f"模型目录 {model_dir} 不存在")
     print(f"正在从 {model_dir} 加载模型...")
     tokenizer = AutoTokenizer.from_pretrained(model_dir)
     config = VVConfig(
@@ -200,7 +201,7 @@ def run_test_suite(model, tokenizer, device, mode, input_data, output_file, test
 
 def test():
     # 1. 获取模型根目录
-    checkpoints_root = os.path.join(vv_path, "checkpoints")
+    checkpoints_root = os.path.join(vv_path, "models", "checkpoints")
     test_configs = [
         (1.3, 5, 10, True),  # 固定温度，变化 top_k
         (0.5, 75, 0.2, False) # 固定 top_k，变化温度
