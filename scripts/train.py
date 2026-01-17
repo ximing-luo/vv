@@ -10,8 +10,8 @@ from src.data import DataSampler, clean_data, preprocess
 from src.train import train
 
 def sample():
-    BASE_DATABASE_DIR = r'D:\Axon\ANN\llm\AGI\src\data\database'
-    METADATA_ROOT_DIR = r'D:\Axon\ANN\llm\AGI\src\data\metadata'
+    BASE_DATABASE_DIR = r'D:\Axon\ANN\llm\vv\src\data\database'
+    METADATA_ROOT_DIR = r'D:\Axon\ANN\llm\vv\src\data\metadata'
     sampler = DataSampler(BASE_DATABASE_DIR, METADATA_ROOT_DIR)
     sampler.sample_wudao(target_gb=0.5, split_size_mb=20)
     sampler.sample_novel(target_gb=0.5, split_size_mb=20)
@@ -42,11 +42,11 @@ def delete_data(paths_to_delete):
 
 if __name__ == "__main__":
     paths_to_delete = [
-        r'D:\Axon\ANN\llm\AGI\src\training\logs',
-        r'D:\Axon\ANN\llm\AGI\src\training\checkpoints',
-        r'D:\Axon\ANN\llm\AGI\src\data\dataset\pretrain',
-        r'D:\Axon\ANN\llm\AGI\src\data\dataset\finetune',
-        r'D:\Axon\ANN\llm\AGI\src\data\metadata'
+        r'D:\Axon\ANN\llm\vv\src\training\logs',
+        r'D:\Axon\ANN\llm\vv\src\training\checkpoints',
+        r'D:\Axon\ANN\llm\vv\src\data\dataset\pretrain',
+        r'D:\Axon\ANN\llm\vv\src\data\dataset\finetune',
+        r'D:\Axon\ANN\llm\vv\src\data\metadata'
     ]
     delete_data(paths_to_delete) # 如果需要清空数据，取消此行注释
     # clean_data()

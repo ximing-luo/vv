@@ -6,7 +6,7 @@ from transformers import CLIPModel, CLIPProcessor
 from .backbone.vision import VisionProj
 from .model import VV
 
-class VV_VLM(VV):
+class VVvlm(VV):
     def __init__(self, config: VVConfig = None):
         # Ensure config has necessary attributes for VV
         if not hasattr(config, 'hidden_dim') and hasattr(config, 'hidden_size'):

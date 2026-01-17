@@ -181,8 +181,8 @@ def train_tokenizer(input_path: str, output_dir: str, vocab_size: int = 6400, ma
 
 if __name__ == "__main__":
     # 使用示例
-    DATA_DIR = r'D:\Axon\ANN\llm\AGI\src\data\metadata\pretrain'
-    TOKENIZER_DIR = r'D:\Axon\ANN\llm\AGI\src\data\dataset\tokenizer'
+    DATA_DIR = r'D:\Axon\ANN\llm\vv\src\data\metadata\pretrain'
+    TOKENIZER_DIR = r'D:\Axon\ANN\llm\vv\src\data\dataset\tokenizer'
     
     # 参数说明:
     # max_gb: 限制参与训练的总数据量

@@ -1,17 +1,14 @@
 import os
 import sys
-import torch
-
-# 设置路径，确保可以导入项目中的模块
-# 我们将 AGI 所在的目录添加到 sys.path
-current_file_path = os.path.abspath(__file__) # .../AGI/src/utils/inference.py
-src_path = os.path.dirname(os.path.dirname(current_file_path)) # .../AGI/src
-agi_path = os.path.dirname(src_path) # .../AGI
-project_root = os.path.dirname(agi_path) # .../ (d:\Axon\ANN\llm)
-
-for path in [src_path, agi_path, project_root]:
+current_file_path = os.path.abspath(__file__) 
+src_path = os.path.dirname(os.path.dirname(current_file_path))
+vv_path = os.path.dirname(src_path)
+project_root = os.path.dirname(vv_path)
+for path in [src_path, vv_path, project_root]:
     if path not in sys.path:
         sys.path.insert(0, path)
+
+import torch
 from configs.model import VVConfig
 from model.model import VV
 from transformers import AutoTokenizer
@@ -203,7 +200,7 @@ def run_test_suite(model, tokenizer, device, mode, input_data, output_file, test
 
 def test():
     # 1. 获取模型根目录
-    checkpoints_root = os.path.join(agi_path, "checkpoints")
+    checkpoints_root = os.path.join(vv_path, "checkpoints")
     test_configs = [
         (1.3, 5, 10, True),  # 固定温度，变化 top_k
         (0.5, 75, 0.2, False) # 固定 top_k，变化温度
@@ -235,10 +232,10 @@ def test():
 
 def main():
     # 1. 获取模型根目录
-    checkpoints_root = os.path.join(agi_path, "checkpoints")
+    checkpoints_root = os.path.join(vv_path, "checkpoints")
     
     print("="*30)
-    print("  AGI 模型推理工具")
+    print("  vv 模型推理工具")
     print("="*30)
     
     # 2. 选择模式

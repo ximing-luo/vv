@@ -99,7 +99,7 @@ def check_and_remove_abnormal(fpath):
         return False
 
 def clean_data():
-    target_dir = r"D:\Axon\ANN\llm\AGI\src\data\database\novel"
+    target_dir = r"D:\Axon\ANN\llm\vv\src\data\database\novel"
     print(f"开始扫描目录: {target_dir}")
     
     # 递归查找所有 .txt 文件

@@ -1,1 +1,1 @@
-from .model import AGI
+from .model import VV

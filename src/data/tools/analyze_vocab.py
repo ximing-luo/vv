@@ -2,7 +2,7 @@ import re
 import os
 
 # 词表文件路径
-vocab_path = r'd:\Axon\ANN\llm\AGI\minimind-master\model\vocab.txt'
+vocab_path = r'd:\Axon\ANN\llm\vv\minimind-master\model\vocab.txt'
 
 def is_chinese(char):
     """判断一个字符是否是汉字"""
