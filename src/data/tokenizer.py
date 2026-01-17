@@ -3,54 +3,7 @@ import json
 import random
 from pathlib import Path
 from tokenizers import Tokenizer, models, trainers, pre_tokenizers, decoders
-
-def export_readable_vocab(tokenizer_path: str, output_path: str):
-    """
-    将 BPE 分词器的词表导出为人类可读的文本文件，包含十六进制字节辅助调试
-    """
-    tokenizer = Tokenizer.from_file(tokenizer_path)
-    
-    # 标准 ByteLevel 映射 (GPT-2 风格)
-    def get_byte_mapping():
-        bs = list(range(ord("!"), ord("~") + 1)) + list(range(ord("¡"), ord("¬") + 1)) + list(range(ord("®"), ord("ÿ") + 1))
-        cs = bs[:]
-        n = 0
-        for b in range(256):
-            if b not in bs:
-                bs.append(b)
-                cs.append(256 + n)
-                n += 1
-        return {chr(c): b for b, c in zip(bs, cs)}
-
-    byte_decoder = get_byte_mapping()
-    vocab = tokenizer.get_vocab()
-    sorted_vocab = sorted(vocab.items(), key=lambda x: x[1])
-    
-    with open(output_path, "w", encoding="utf-8") as f:
-        f.write(f"Vocab Size: {len(sorted_vocab)}\n")
-        f.write(f"{'ID':<8} | {'Raw (BPE)':<20} | {'Hex Bytes':<20} | {'Decoded':<15}\n")
-        f.write("-" * 80 + "\n")
-        
-        for token, token_id in sorted_vocab:
-            # 1. 获取原始字节
-            try:
-                raw_bytes = bytes([byte_decoder[c] for c in token])
-                hex_str = raw_bytes.hex(' ')
-            except KeyError:
-                hex_str = "N/A"
-
-            # 2. 尝试解码
-            try:
-                decoded = tokenizer.decode([token_id])
-                # 如果解码结果全是空白但原词不是空白，或者是空字符串，则标记为碎片
-                if not decoded.strip() and token.strip():
-                    display = f"[Fragment]"
-                else:
-                    display = decoded
-            except:
-                display = "[Error]"
-            
-            f.write(f"{token_id:<8} | {token:<20} | {hex_str:<20} | {display:<15}\n")
+from .tools.vocab_tool import export_readable_vocab
 
 def get_training_files(input_path: str, max_gb: float = 1.0, sample_rate: float = 1.0):
     """
