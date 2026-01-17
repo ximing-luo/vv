@@ -1,11 +1,10 @@
 __pycache__/
 .conda
-checkpoints
+models
 src/data/dataset/*
 !src/data/dataset/tokenizer
 src/data/database
 src/data/metadata
-src/training/logs/*
 tests
 log.md
 inference_output.txt

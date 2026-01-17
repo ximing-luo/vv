@@ -232,7 +232,8 @@ def test():
 
 def main():
     # 1. 获取模型根目录
-    checkpoints_root = os.path.join(vv_path, "checkpoints")
+    models_path = os.path.join(vv_path, "models")
+    checkpoints_root = os.path.join(models_path, "checkpoints")
     
     print("="*30)
     print("  vv 模型推理工具")

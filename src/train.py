@@ -34,7 +34,7 @@ class ModelTrainer:
         self.mode = mode
         self.root_path = root_path
         self.dataset_root = os.path.join(self.root_path, 'src', 'data', 'dataset')
-        self.checkpoints_root = os.path.join(self.root_path, 'checkpoints')
+        self.checkpoints_root = os.path.join(self.root_path, 'models', 'checkpoints')
         self.tokenizer_dir = os.path.join(self.dataset_root, 'tokenizer')
         self._init_config()
         self.num_train_epochs = 1
@@ -125,7 +125,7 @@ class ModelTrainer:
         training_args = TrainingArguments(
             # 1. 输出与日志路径
             output_dir=self.output_dir, # 输出目录，用于存放 Checkpoints
-            logging_dir=os.path.join(self.root_path, 'src', 'training', 'logs'), # TensorBoard 日志目录
+            logging_dir=os.path.join(self.root_path, 'models', 'logs'), # TensorBoard 日志目录
             report_to="none", # 报告目标（如 wandb），这里关闭
             # 2. 训练超参数 (Hyperparameters)
             learning_rate=self.learning_rate, # 初始学习率
