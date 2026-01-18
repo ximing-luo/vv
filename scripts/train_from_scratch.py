@@ -51,5 +51,5 @@ if __name__ == "__main__":
     #     mixed_sample_ratio=0.1,
     #     finetune_sample_ratio=1
     #     )
-    train(mode='pretrain', num_train_epochs=0.5)
+    # train(mode='pretrain', num_train_epochs=0.5)
     train(mode='finetune', num_train_epochs=0.5)

@@ -138,8 +138,9 @@ class ModelTrainer:
             per_device_train_batch_size=train_batch_size, # 单卡训练 Batch Size
             gradient_accumulation_steps=grad_steps, # 梯度累积步数，变相扩大 Batch Size
             weight_decay=0.01, # 权重衰减 (L2 正则化)
-            warmup_ratio=0.02, # 预热步数比例 (Warmup Ratio)，设置为总步数的 2%
-            lr_scheduler_type="cosine", # 学习率调度策略 (余弦退火)
+            warmup_ratio=0.05, # 预热步数比例 (Warmup Ratio)，设置为总步数的 2%
+            lr_scheduler_type="cosine_with_min_lr", # 学习率调度策略 (余弦退火)
+            lr_scheduler_kwargs={"min_lr_rate": 0.1}, # 最小学习率比例，设置为初始学习率的 10%
             # 3. 评估配置 (Evaluation)
             per_device_eval_batch_size=train_batch_size, # 单卡评估 Batch Size
             eval_strategy="steps", # 评估策略：按步数 ('steps') 或按轮数 ('epoch')
