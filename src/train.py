@@ -50,6 +50,7 @@ class ModelTrainer:
             self.output_dir = os.path.join(self.checkpoints_root, 'pretrain')
             self.final_save_path = os.path.join(self.output_dir, 'final')
             self.learning_rate = 3e-4
+            self.weight_decay = 0.1
             # 预训练模式：自动寻找断点继续训练，或者从头开始
             self.resume_from_checkpoint = self._get_latest_checkpoint(self.output_dir)
             if self.resume_from_checkpoint:
@@ -65,6 +66,7 @@ class ModelTrainer:
             self.output_dir = os.path.join(self.checkpoints_root, 'finetune')
             self.final_save_path = os.path.join(self.output_dir, 'final')
             self.learning_rate = 5e-5
+            self.weight_decay = 0.02
             # 微调模式：优先检查是否有断点，如果没有则从预训练模型开始
             self.resume_from_checkpoint = self._get_latest_checkpoint(self.output_dir)
             if self.resume_from_checkpoint:
@@ -137,7 +139,7 @@ class ModelTrainer:
             num_train_epochs=self.num_train_epochs, # 训练总轮数 (Epochs)
             per_device_train_batch_size=train_batch_size, # 单卡训练 Batch Size
             gradient_accumulation_steps=grad_steps, # 梯度累积步数，变相扩大 Batch Size
-            weight_decay=0.01, # 权重衰减 (L2 正则化)
+            weight_decay=self.weight_decay, # 权重衰减 (L2 正则化)
             warmup_ratio=0.05, # 预热步数比例 (Warmup Ratio)，设置为总步数的 2%
             lr_scheduler_type="cosine_with_min_lr", # 学习率调度策略 (余弦退火)
             lr_scheduler_kwargs={"min_lr_rate": 0.1}, # 最小学习率比例，设置为初始学习率的 10%
