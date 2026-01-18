@@ -1,11 +1,11 @@
 import torch
 from transformers import Trainer, EarlyStoppingCallback
 from data.dataset import TokenBucketSampler, dynamic_collate_fn
-from tools.system import SystemControlCallback
-from tools.log import CustomTensorBoardCallback
-from tools.checkpoint import CheckpointCallback
-from tools.inference import InferenceCallback
-from tools.rollback import RollbackCallback
+from .tools.system import SystemControlCallback
+from .tools.log import CustomTensorBoardCallback
+from .tools.checkpoint import CheckpointCallback
+from .tools.inference import InferenceCallback
+from .tools.rollback import RollbackCallback
 
 test_cases = [
     {
@@ -45,30 +45,30 @@ test_cases = [
     }
 ]
 
-class BaseTrainer(Trainer):
+# 自定义训练器以支持动态批处理
+class DynamicTrainer(Trainer):
     """
-    基础训练器类 (BaseTrainer)
-    继承自 transformers.Trainer，集成了自定义的系统优化和监控逻辑。
+    支持动态批处理的训练器。
+    原理：
+    默认的 Trainer 使用 RandomSampler，每个 Batch 的样本数固定，但样本长度可能不一（需要 Padding 到最长）。
+    DynamicTrainer 覆盖了 get_train_dataloader，使用 TokenBucketSampler。
+    TokenBucketSampler 会将长度相近的样本聚在一起，使得每个 Batch 的 Padding 最少，
+    且保证每个 Batch 的总 Token 数（batch_size * max_len）接近设定的 max_tokens。
     """
     def __init__(self, model=None, args=None, train_dataset=None, eval_dataset=None, 
                  tokenizer=None, data_collator=None, callbacks=None, **kwargs):
                  
         if callbacks is None: callbacks = []
-        # 1. 系统控制回调 (键盘监控、环境优化)
-        callbacks.append(SystemControlCallback())
-        # 2. 自定义 TensorBoard 回调
-        callbacks.append(CustomTensorBoardCallback())
-        # 3. 检查点回调 (自动导出模型配置)
-        callbacks.append(CheckpointCallback())
-        # 4. 自动回退回调 (发现跑飞时自动回到上一个最优状态)
-        callbacks.append(RollbackCallback(rollback_threshold=3.0))
-        # 5. 早停回调 (作为最后一道防线)
-        # 如果模型回退多次依然无法在 5 次评估内降低 Loss，则彻底停止训练
-        callbacks.append(EarlyStoppingCallback(early_stopping_patience=10))
-        # 6. 推理模拟与对话能力测试回调
-        callbacks.append(InferenceCallback(tokenizer=tokenizer, test_cases=test_cases))
+        # 注入自定义回调逻辑
+        callbacks.extend([
+            SystemControlCallback(),     # 系统控制 (键盘监控、环境优化)
+            CustomTensorBoardCallback(), # 自定义 TensorBoard 日志
+            CheckpointCallback(),        # 检查点自动导出
+            RollbackCallback(rollback_threshold=3.0), # 自动回退
+            EarlyStoppingCallback(early_stopping_patience=10), # 早停
+            InferenceCallback(tokenizer=tokenizer, test_cases=test_cases) # 推理模拟
+        ])
         
-        # 调用父类初始化
         super().__init__(
             model=model, args=args,
             data_collator=data_collator,
@@ -78,23 +78,13 @@ class BaseTrainer(Trainer):
             callbacks=callbacks,
             **kwargs
         )
-        print(f"[BaseTrainer] 已继承 transformers.Trainer，内置回调(System/Log/Checkpoint)已注入")
+        print(f"[DynamicTrainer] 已初始化，内置回调已注入")
 
-# 自定义训练器以支持动态批处理
-class DynamicTrainer(BaseTrainer):
-    """
-    支持动态批处理的训练器。
-    原理：
-    默认的 Trainer 使用 RandomSampler，每个 Batch 的样本数固定，但样本长度可能不一（需要 Padding 到最长）。
-    DynamicTrainer 覆盖了 get_train_dataloader，使用 TokenBucketSampler。
-    TokenBucketSampler 会将长度相近的样本聚在一起，使得每个 Batch 的 Padding 最少，
-    且保证每个 Batch 的总 Token 数（batch_size * max_len）接近设定的 max_tokens。
-    """
     def get_train_dataloader(self):
         # 使用 TokenBucketSampler 实现固定 Token 量的动态批处理
         # max_tokens = max_seq_len * batch_size * rope_ntk_alpha
         max_tokens = self.model.config.max_seq_len * self.args.per_device_train_batch_size * self.model.config.rope_ntk_alpha
-        sampler = TokenBucketSampler(self.train_dataset, max_tokens=max_tokens, shuffle=True)
+        sampler = TokenBucketSampler(self.train_dataset, max_tokens=max_tokens)
         # 使用 lambda 包装 collate_fn，传递 tokenizer 的 pad_token_id
         pad_id = self.processing_class.pad_token_id if self.processing_class else 0
         return torch.utils.data.DataLoader(
@@ -104,9 +94,10 @@ class DynamicTrainer(BaseTrainer):
         )
 
     def get_eval_dataloader(self, eval_dataset=None):
+        # 如果调用 evaluate() 时传入了特定数据集，则优先使用；否则使用初始化时的 eval_dataset
         eval_dataset = eval_dataset if eval_dataset is not None else self.eval_dataset
         max_tokens = self.model.config.max_seq_len * self.args.per_device_eval_batch_size * self.model.config.rope_ntk_alpha
-        sampler = TokenBucketSampler(eval_dataset, max_tokens=max_tokens, shuffle=False)
+        sampler = TokenBucketSampler(eval_dataset, max_tokens=max_tokens)
         pad_id = self.processing_class.pad_token_id if self.processing_class else 0
         return torch.utils.data.DataLoader(
             eval_dataset, batch_sampler=sampler,

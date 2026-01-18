@@ -1,4 +1,3 @@
-from ast import Continue
 import os
 import json
 import numpy as np
@@ -289,8 +288,8 @@ class PreprocessPipeline:
 
 def test():
     # 配置
-    METADATA_ROOT = r'D:\Axon\ANN\llm\AGI\src\data\metadata'
-    DATASET_ROOT = r'D:\Axon\ANN\llm\AGI\src\data\dataset'
+    METADATA_ROOT = r'D:\Axon\ANN\llm\vv\src\data\metadata'
+    DATASET_ROOT = r'D:\Axon\ANN\llm\vv\src\data\dataset'
     TOKENIZER_DIR = os.path.join(DATASET_ROOT, 'tokenizer')
     pretrain_input_dir = os.path.join(METADATA_ROOT, "pretrain")
     pretrain_output_bin = os.path.join(DATASET_ROOT, "pretrain", "pretrain_data.bin")

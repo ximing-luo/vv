@@ -10,6 +10,7 @@
 - Model Forward ：模型接收到形状为 [Batch, Seq_Len] 的 Tensor 开始计算
 """
 import torch
+import torch.nn.utils.rnn as rnn_utils
 import numpy as np
 from torch.utils.data import Dataset, Sampler
 import struct
@@ -124,108 +125,58 @@ class TokenBucketSampler(Sampler):
     基于 Token 数量的 Batch Sampler。
     目标是让每个 Batch 的总 Token 数尽可能接近 max_tokens，从而实现动态 Batch Size。
     """
-    def __init__(self, dataset, max_tokens, shuffle=True, drop_last=False):
+    def __init__(self, dataset, max_tokens):
         self.dataset = dataset
         self.max_tokens = max_tokens
-        self.shuffle = shuffle
-        self.drop_last = drop_last
-        
-        # 预先计算每个样本的长度
-        # 优化：优先从数据集获取预存的长度，避免重复迭代
         self.lengths = self._get_lengths(dataset)
-        if self.lengths is None:
-            print(f"[TokenBucketSampler] 警告: 数据集未预存长度，正在实时计算 (这可能比较慢)...")
-            self.lengths = [len(dataset[i]) for i in range(len(dataset))]
 
     def _get_lengths(self, dataset):
         """递归获取数据集长度，支持嵌套的 Subset"""
-        if hasattr(dataset, 'lengths'):
-            return dataset.lengths
+        if hasattr(dataset, 'lengths'): return dataset.lengths
         if hasattr(dataset, 'dataset') and hasattr(dataset, 'indices'):
-            base_lengths = self._get_lengths(dataset.dataset)
-            if base_lengths is not None:
-                return [base_lengths[i] for i in dataset.indices]
+            base = self._get_lengths(dataset.dataset)
+            return base[dataset.indices]
         return None
 
     def __iter__(self):
-        indices = np.arange(len(self.dataset))
-        
-        if self.shuffle:
-            # 优化：为了减少 Padding 浪费，我们先按长度进行“粗略排序”
-            # 但为了保持一定的随机性，我们可以给长度加上一点随机扰动，或者分块排序
-            # 这里采用“排序后分桶”的策略
-            lengths = np.array(self.lengths)
-            # 获取排序后的索引
-            indices = indices[np.argsort(lengths)]
-            
-            # 为了防止模型总是先学短句再学长句，我们将排序后的序列切成小块进行局部打乱
-            # 或者更简单的：直接分组后打乱 Batch 顺序
-            
-        batches = []
-        current_batch = []
-        max_len_in_batch = 0
-        
+        # 1. 智能排序：按长度聚类以减少 Padding
+        indices = np.argsort(self.lengths)
+        # 2. 贪婪分桶：动态构建 Batch
+        batches, batch, max_len = [], [], 0
         for idx in indices:
-            seq_len = self.lengths[idx]
-            # 预估加入该样本后的 Batch Token 数 (以当前最大长度为准)
-            temp_max_len = max(max_len_in_batch, seq_len)
-            estimated_tokens = (len(current_batch) + 1) * temp_max_len
-            
-            if not current_batch:
-                current_batch.append(idx)
-                max_len_in_batch = seq_len
-                continue
-            
-            if estimated_tokens <= self.max_tokens:
-                current_batch.append(idx)
-                max_len_in_batch = temp_max_len
-            else:
-                batches.append(current_batch)
-                current_batch = [idx]
-                max_len_in_batch = seq_len
-                
-        if current_batch and not self.drop_last:
-            batches.append(current_batch)
-            
-        if self.shuffle:
-            # 关键：打乱 Batch 的顺序，确保训练的随机性
-            # 此时每个 Batch 内部的样本长度是接近的，但 Batch 出现的顺序是随机的
-            np.random.shuffle(batches)
-            
-        for batch in batches:
-            yield batch
+            curr_len = self.lengths[idx]
+            if batch and (len(batch) + 1) * max(max_len, curr_len) > self.max_tokens:
+                batches.append(batch)
+                batch, max_len = [], 0
+            batch.append(idx)
+            max_len = max(max_len, curr_len)
+        # 3. 随机打乱 Batch 顺序并输出 (丢弃最后一个不满的 Batch)
+        np.random.shuffle(batches)
+        return iter(batches)
 
     def __len__(self):
         # 注意：这里的长度只是近似的，因为动态 Batch Size 每次迭代可能不同
         # 但为了 DataLoader 的兼容性，我们需要返回一个值
         # 这里我们预估一个平均 Batch Size
         avg_len = np.mean(self.lengths)
+        # 平均每个 Batch 包含的样本数
         avg_batch_size = max(1, self.max_tokens // avg_len)
         return int(np.ceil(len(self.dataset) / avg_batch_size))
 
 def dynamic_collate_fn(batch, padding_value=0):
     """
     动态整理函数：处理 Dataset 返回的 (X, Y) 元组列表。
+    优化后使用 pad_sequence 进行高效填充。
     """
     # batch 是一个列表: [(X1, Y1), (X2, Y2), ...]
-    # 1. 分离 X 和 Y
+    # 分离 X 和 Y
     X_list = [item[0] for item in batch]
     Y_list = [item[1] for item in batch]
     
-    # 2. 获取当前 batch 的最大长度
-    max_len = max(len(x) for x in X_list)
-    batch_size = len(batch)
-    
-    # 3. 创建填充后的 Tensor
-    # 注意：Y 的填充值应该是 -100 (CrossEntropy 忽略索引)
-    input_ids = torch.full((batch_size, max_len), padding_value, dtype=torch.long)
-    labels = torch.full((batch_size, max_len), -100, dtype=torch.long)
-    
-    # 4. 填充数据
-    for i in range(batch_size):
-        length = len(X_list[i])
-        input_ids[i, :length] = X_list[i]
-        labels[i, :length] = Y_list[i]
+    # 使用 pad_sequence 自动处理填充
+    # batch_first=True 使得输出形状为 [batch_size, max_len]
+    input_ids = rnn_utils.pad_sequence(X_list, batch_first=True, padding_value=padding_value)
+    labels = rnn_utils.pad_sequence(Y_list, batch_first=True, padding_value=-100)
     
     return {
         "input_ids": input_ids,

@@ -1,17 +1,14 @@
 import os
 import sys
-import torch
-
-# 设置路径，确保可以导入项目中的模块
-# 我们将 AGI 所在的目录添加到 sys.path
-current_file_path = os.path.abspath(__file__) # .../AGI/src/utils/inference.py
-src_path = os.path.dirname(os.path.dirname(current_file_path)) # .../AGI/src
-agi_path = os.path.dirname(src_path) # .../AGI
-project_root = os.path.dirname(agi_path) # .../ (d:\Axon\ANN\llm)
-
-for path in [src_path, agi_path, project_root]:
+current_file_path = os.path.abspath(__file__) 
+src_path = os.path.dirname(os.path.dirname(current_file_path))
+vv_path = os.path.dirname(src_path)
+project_root = os.path.dirname(vv_path)
+for path in [src_path, vv_path, project_root]:
     if path not in sys.path:
         sys.path.insert(0, path)
+
+import torch
 from configs.model import VVConfig
 from model.model import VV
 from transformers import AutoTokenizer
@@ -20,6 +17,7 @@ def load_model(model_dir, device='cuda' if torch.cuda.is_available() else 'cpu')
     """
     加载模型和分词器
     """
+    if not os.path.exists(model_dir): raise FileNotFoundError(f"模型目录 {model_dir} 不存在")
     print(f"正在从 {model_dir} 加载模型...")
     tokenizer = AutoTokenizer.from_pretrained(model_dir)
     config = VVConfig(
@@ -29,32 +27,40 @@ def load_model(model_dir, device='cuda' if torch.cuda.is_available() else 'cpu')
         pad_token_id=tokenizer.pad_token_id
     )
     
-    # 3. 初始化模型
+    # 初始化模型
     model = VV(config)
     weights_path = os.path.join(model_dir, "pytorch_model.bin")
-    state_dict = torch.load(weights_path, map_location=device)
-    print(f"成功加载权重: {weights_path}")
-        
-    model.load_state_dict(state_dict)
-    model.to(device)
-    model.eval()
-    
-    print("模型加载完成。")
-    return model, tokenizer, device
+    try:
+        state_dict = torch.load(weights_path, map_location=device)
+        print(f"成功加载权重: {weights_path}")
+        model.load_state_dict(state_dict)
+        model.to(device)
+        model.eval()
+        print("模型加载完成。")
+        return model, tokenizer, device
+    except Exception as e:
+        print(f"加载模型权重时出错: {e}")
+        raise
 
-config = VVConfig()
-def stream_inference(model, tokenizer, input_data, temperature=1.3, max_new_tokens=config.max_seq_len, top_k=75, device='cpu', mode='chat', output_file=None):
+def _smart_print(text, output_file=None, end="\n", flush=True):
+    """
+    内部辅助函数：同时打印到控制台和文件
+    """
+    print(text, end=end, flush=flush)
+    if output_file:
+        output_file.write(str(text) + end)
+        output_file.flush()
+
+def stream_inference(model, tokenizer, input_data, temperature=1.3, max_new_tokens=None, top_k=75, device='cpu', mode='chat', output_file=None):
     """
     流式推理生成文本
+    :param max_new_tokens: 生成的最大 token 数，默认为 model.config.max_seq_len
     :param input_data: 如果是 chat 模式，为 messages 列表；如果是 pretrain 模式，为 prompt 字符串
     :param mode: 'pretrain' (续写模式) 或 'chat' (对话模式)
     :param output_file: 可选的文件对象，用于同步记录输出
     """
-    def smart_print(text, end="\n", flush=True):
-        print(text, end=end, flush=flush)
-        if output_file:
-            output_file.write(str(text) + end)
-            output_file.flush()
+    if max_new_tokens is None:
+        max_new_tokens = model.config.max_seq_len
 
     # 根据模式构造输入文本
     if mode == 'chat':
@@ -69,11 +75,11 @@ def stream_inference(model, tokenizer, input_data, temperature=1.3, max_new_toke
     if mode == 'chat':
         # 仅打印当前输入的 prompt
         user_prompt = input_data[-1]['content'] if isinstance(input_data, list) else input_data
-        smart_print(f"\nUser: {user_prompt}")
-        smart_print("Assistant: ", end="")
+        _smart_print(f"\nUser: {user_prompt}", output_file)
+        _smart_print("Assistant: ", output_file, end="")
     else:
         # 预训练/续写模式
-        smart_print(f"\n{input_data}", end="")
+        _smart_print(f"\n{input_data}", output_file, end="")
     
     full_response = []
     tokens_cached = []
@@ -101,25 +107,23 @@ def stream_inference(model, tokenizer, input_data, temperature=1.3, max_new_toke
         # 计算新生成的文本内容
         new_text = full_text[printed_len:]
         if new_text:
-            smart_print(new_text, end="", flush=True)
+            _smart_print(new_text, output_file, end="", flush=True)
             full_response.append(new_text)
             printed_len = len(full_text)
             
-    smart_print("\n" + "-"*50)
+    _smart_print("\n" + "-"*50, output_file)
     return ''.join(full_response)
 
-def inference(model, tokenizer, input_data, temperature=1.3, max_new_tokens=config.max_seq_len, top_k=75, device='cpu', mode='chat', output_file=None):
+def inference(model, tokenizer, input_data, temperature=1.3, max_new_tokens=None, top_k=75, device='cpu', mode='chat', output_file=None):
     """
     非流式推理生成文本：等待所有 token 生成完成后一次性解码并返回。
+    :param max_new_tokens: 生成的最大 token 数，默认为 model.config.max_seq_len
     :param input_data: 如果是 chat 模式，为 messages 列表；如果是 pretrain 模式，为 prompt 字符串
     :param mode: 'pretrain' (续写模式) 或 'chat' (对话模式)
     :param output_file: 可选的文件对象，用于同步记录输出
     """
-    def smart_print(text, end="\n", flush=True):
-        print(text, end=end, flush=flush)
-        if output_file:
-            output_file.write(str(text) + end)
-            output_file.flush()
+    if max_new_tokens is None:
+        max_new_tokens = model.config.max_seq_len
 
     # 1. 构造输入
     if mode == 'chat':
@@ -133,10 +137,10 @@ def inference(model, tokenizer, input_data, temperature=1.3, max_new_tokens=conf
     # 2. 打印提示信息
     if mode == 'chat':
         user_prompt = input_data[-1]['content'] if isinstance(input_data, list) else input_data
-        smart_print(f"\nUser: {user_prompt}")
-        smart_print("Assistant: ", end="")
+        _smart_print(f"\nUser: {user_prompt}", output_file)
+        _smart_print("Assistant: ", output_file, end="")
     else:
-        smart_print(f"\n{input_data}", end="")
+        _smart_print(f"\n{input_data}", output_file, end="")
 
     # 3. 循环生成 token (不实时解码)
     generated_tokens = []
@@ -155,8 +159,8 @@ def inference(model, tokenizer, input_data, temperature=1.3, max_new_tokens=conf
     full_response = tokenizer.decode(generated_tokens, skip_special_tokens=True)
     
     # 5. 一次性渲染输出
-    smart_print(full_response)
-    smart_print("-" * 50)
+    _smart_print(full_response, output_file)
+    _smart_print("-" * 50, output_file)
 
 def find_latest_model(checkpoints_root, mode):
     """
@@ -166,13 +170,11 @@ def find_latest_model(checkpoints_root, mode):
     """
     subfolder = "finetune" if mode == 'finetune' else "pretrain"
     final_path = os.path.join(checkpoints_root, subfolder, "final")
-    
     # 检查是否存在
     if os.path.exists(final_path):
         has_bin = os.path.exists(os.path.join(final_path, "pytorch_model.bin"))
         if has_bin:
-            return final_path
-            
+            return final_path      
     return None
 
 def run_test_suite(model, tokenizer, device, mode, input_data, output_file, test_configs, max_new_tokens=100):
@@ -203,7 +205,7 @@ def run_test_suite(model, tokenizer, device, mode, input_data, output_file, test
 
 def test():
     # 1. 获取模型根目录
-    checkpoints_root = os.path.join(agi_path, "checkpoints")
+    checkpoints_root = os.path.join(vv_path, "models", "checkpoints")
     test_configs = [
         (1.3, 5, 10, True),  # 固定温度，变化 top_k
         (0.5, 75, 0.2, False) # 固定 top_k，变化温度
@@ -235,10 +237,11 @@ def test():
 
 def main():
     # 1. 获取模型根目录
-    checkpoints_root = os.path.join(agi_path, "checkpoints")
+    models_path = os.path.join(vv_path, "models")
+    checkpoints_root = os.path.join(models_path, "checkpoints")
     
     print("="*30)
-    print("  AGI 模型推理工具")
+    print("  vv 模型推理工具")
     print("="*30)
     
     # 2. 选择模式
