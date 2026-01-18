@@ -13,13 +13,13 @@ def sample():
     BASE_DATABASE_DIR = os.path.join(src_path, 'data', 'database')
     METADATA_ROOT_DIR = os.path.join(src_path, 'data', 'metadata')
     sampler = DataSampler(BASE_DATABASE_DIR, METADATA_ROOT_DIR)
-    sampler.sample_wudao(target_gb=0.5, split_size_mb=20)
+    sampler.sample_wudao(target_gb=10, split_size_mb=20)
     sampler.sample_novel(target_gb=0.5, split_size_mb=20)
-    sampler.sample_pretrain_minimind(target_gb=0.5, split_size_mb=20)
+    # sampler.sample_pretrain_minimind(target_gb=0.5, split_size_mb=20)
 
-    sampler.sample_sft(target_gb=0.2, split_size_mb=20)
+    # sampler.sample_sft(target_gb=0.2, split_size_mb=20)
     # sampler.sample_firefly(target_gb=0.1, split_size_mb=20)
-    sampler.sample_chat(target_gb=0.2, split_size_mb=20)
+    # sampler.sample_chat(target_gb=0.2, split_size_mb=20)
 
 def delete_data(paths_to_delete):
     """
@@ -45,11 +45,11 @@ paths_to_delete = [
 if __name__ == "__main__":
     # delete_data(paths_to_delete) # 如果需要清空数据，取消此行注释
     # # clean_data()
-    # sample()
-    # preprocess(num_workers=4,
-    #     pretrain_sample_ratio=1,
-    #     mixed_sample_ratio=0.1,
-    #     finetune_sample_ratio=1
-    #     )
-    # train(mode='pretrain', num_train_epochs=0.5)
-    train(mode='finetune', num_train_epochs=0.5)
+    sample()
+    preprocess(num_workers=4,
+        pretrain_sample_ratio=1,
+        mixed_sample_ratio=0.1,
+        finetune_sample_ratio=1
+        )
+    train(mode='pretrain', num_train_epochs=1)
+    # train(mode='finetune', num_train_epochs=0.5)

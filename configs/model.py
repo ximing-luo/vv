@@ -1,4 +1,5 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import List
 
 @dataclass
 class VVConfig:
@@ -25,4 +26,11 @@ class VVConfig:
     rope_base: float = 10000.0
     rope_ntk_alpha: float = 1.0  # NTK 的扩展倍数
     
+@dataclass
+class VisualVVConfig(VVConfig):
+    # 视觉投影配置
+    vision_hidden_dim: int = 768
+    vision_model_path: str = "./model/vision_model/clip-vit-base-patch16"
+    image_special_token: str = '@' * 196
+    image_ids: List[int] = field(default_factory=lambda: [34] * 196)
 
