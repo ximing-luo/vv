@@ -36,12 +36,12 @@ class ModelTrainer:
         self.dataset_root = os.path.join(self.root_path, 'src', 'data', 'dataset')
         self.checkpoints_root = os.path.join(self.root_path, 'models', 'checkpoints')
         self.tokenizer_dir = os.path.join(self.dataset_root, 'tokenizer')
+        self.resume_from_checkpoint = None
+        self.init_weights_path = None
         self._init_config()
         self.num_train_epochs = 1
         self.eval_steps = 500
         self.save_steps = 500
-        self.resume_from_checkpoint = None
-        self.init_weights_path = None
         
     def _init_config(self):
         """初始化训练配置和路径"""
@@ -55,6 +55,9 @@ class ModelTrainer:
             if self.resume_from_checkpoint:
                 print(f"[System] 模式: 继续预训练 (Resume from {self.resume_from_checkpoint})")
             else:
+                # 取消注释可以微调之后继续预训练
+                # self.init_weights_path = os.path.join(self.checkpoints_root, 'finetune', 'final')
+                # print(f"[System] 模式: 重新预训练 (Load weights from {self.init_weights_path})")
                 print(f"[System] 模式: 重新预训练 (Start from scratch)")
 
         elif self.mode == 'finetune':
@@ -94,22 +97,12 @@ class ModelTrainer:
         )
         # 如果是预训练模式 (pretrain)，强制重置 rope_ntk_alpha = 1.0
         if self.mode == 'pretrain': config.rope_ntk_alpha = 1.0
-        self.model = VV(config)
-        # 加载权重逻辑
-        # 1. 优先尝试从 Checkpoint 恢复权重 (关键修复：Trainer 无法自动加载非 PreTrainedModel 的权重)
-        if self.resume_from_checkpoint:
-            print(f"[System] 正在从 Checkpoint {self.resume_from_checkpoint} 强制加载模型权重...")
-            if self._load_model_weights(self.model, self.resume_from_checkpoint):
-                 print(f"[System] Checkpoint 权重加载成功。")
-            else:
-                 print(f"[Warning] Checkpoint 权重加载失败，将依赖 Trainer 自动恢复（风险：可能导致随机初始化）。")
-
-        # 2. 如果不是 Resume，或者是 Finetune 模式需要从 Pretrain 初始化
-        elif self.init_weights_path:
+        self.model = VV(config) # 初始化模型
+        # 加载权重逻辑：如果有初始化权重路径，尝试加载
+        if self.init_weights_path:
             print(f"正在从 {self.init_weights_path} 加载模型权重...")
             if not self._load_model_weights(self.model, self.init_weights_path):
                 print(f"[Warning] 未在 {self.init_weights_path} 找到权重文件，将使用随机初始化。")
-
         # 打印并记录参数量
         total_params = sum(p.numel() for p in self.model.parameters())
         trainable_params = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
