@@ -2,7 +2,7 @@ import os
 import torch
 import torch.nn.functional as F
 from typing import Optional
-from transformers import CLIPModel, CLIPProcessor
+from transformers import CLIPVisionModel, CLIPImageProcessor
 from .backbone.vision import VisionProjector
 from .model import VV
 
@@ -20,8 +20,8 @@ class VisualVV(VV):
         hf_logging.set_verbosity_error()
         if not os.path.exists(model_path):
             return None, None
-        model = CLIPModel.from_pretrained(model_path)
-        processor = CLIPProcessor.from_pretrained(model_path, use_fast=True)
+        model = CLIPVisionModel.from_pretrained(model_path)
+        processor = CLIPImageProcessor.from_pretrained(model_path)
         # 冻结 vision_encoder 的所有参数
         for param in model.parameters():
             param.requires_grad = False
@@ -36,7 +36,7 @@ class VisualVV(VV):
     @staticmethod
     def get_image_embeddings(image_tensors, vision_model):
         with torch.no_grad():
-            outputs = vision_model.vision_model(pixel_values=image_tensors)
+            outputs = vision_model(pixel_values=image_tensors)
         img_embedding = outputs.last_hidden_state[:, 1:, :].squeeze()
         return img_embedding
 

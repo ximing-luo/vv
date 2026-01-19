@@ -12,7 +12,6 @@ import pandas as pd
 from PIL import Image
 import io
 import torch
-from transformers import CLIPProcessor
 
 # 将项目根目录添加到 sys.path
 current_dir = os.path.dirname(os.path.abspath(__file__))

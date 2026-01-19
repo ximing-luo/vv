@@ -162,21 +162,6 @@ def inference(model, tokenizer, input_data, temperature=1.3, max_new_tokens=None
     _smart_print(full_response, output_file)
     _smart_print("-" * 50, output_file)
 
-def find_latest_model(checkpoints_root, mode):
-    """
-    根据模式直接使用对应的 final 模型。
-    mode='chat' -> finetune/final
-    mode='pretrain' -> pretrain/final
-    """
-    subfolder = "finetune" if mode == 'finetune' else "pretrain"
-    final_path = os.path.join(checkpoints_root, subfolder, "final")
-    # 检查是否存在
-    if os.path.exists(final_path):
-        has_bin = os.path.exists(os.path.join(final_path, "pytorch_model.bin"))
-        if has_bin:
-            return final_path      
-    return None
-
 def run_test_suite(model, tokenizer, device, mode, input_data, output_file, test_configs, max_new_tokens=100):
     """
     运行一组推理测试，测试不同的温度和 top_k 参数
@@ -218,10 +203,10 @@ def test():
         "    叶晨心里有些苦涩，在末世里挣扎了十年之久，每天小心翼翼，连睡觉都是抱着兵器，稍有动静便会被惊动，今天却因为一个小小的疏忽，没有抹去猎杀三头犬时留下的气息，被这头血角兽给追踪上了。\n"
         "    就这样感受着身体被一点点嚼碎，也许是个不错的死法？\n"
     )
+    model_path = os.path.join(os.path.dirname(checkpoints_root), "vv")
     with open("inference_output.txt", "w", encoding="utf-8") as output_file:
         # 2. 测试聊天模式
         print("\n=== 测试聊天模式 ===")
-        model_path = find_latest_model(checkpoints_root, 'finetune')
         model, tokenizer, device = load_model(model_path)
         run_test_suite(model, tokenizer, device, 'chat', messages, output_file, test_configs,
         max_new_tokens= 400
@@ -229,7 +214,6 @@ def test():
 
         # 3. 测试续写模式
         # print("\n=== 测试续写模式 ===")
-        # model_path = find_latest_model(checkpoints_root, 'finetune')
         # model, tokenizer, device = load_model(model_path)
         # run_test_suite(model, tokenizer, device, 'pretrain', prompt, output_file, test_configs,
         # max_new_tokens= 2048

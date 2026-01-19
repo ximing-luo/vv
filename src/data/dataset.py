@@ -16,10 +16,7 @@ from torch.utils.data import Dataset, Sampler
 import struct
 import io
 from PIL import Image
-try:
-    from transformers import CLIPProcessor
-except ImportError:
-    CLIPProcessor = None
+from transformers import CLIPProcessor, CLIPImageProcessor
 
 class PretrainDataset(Dataset):
     """
@@ -152,13 +149,8 @@ class VLMDatasetMixin:
 
         # 3. 内存映射原始图像数据 (.img)
         self.img_data = np.memmap(self.img_path, mode='r')
-        
-        # 4. 初始化 Processor
-        if CLIPProcessor is None:
-            raise ImportError("transformers not installed or CLIPProcessor import failed")
         # 训练时必须开启 do_normalize=True
-        # Explicitly set use_fast=True to avoid warning and use Rust implementation if available
-        self.processor = CLIPProcessor.from_pretrained(vision_model_path, use_fast=True)
+        self.processor = CLIPImageProcessor.from_pretrained(vision_model_path, use_fast=True)
 
         print(f"[VLMDataset] 已加载图像索引: {self.num_images} 张图片")
 
