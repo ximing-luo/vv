@@ -108,12 +108,25 @@ class VisualVV(VV):
             if len(pixel_values.shape) == 6:
                 pixel_values = pixel_values.squeeze(2)
             bs, num, c, im_h, im_w = pixel_values.shape
-            stack_dim = 1 if bs > 1 else 0
-            vision_tensors = torch.stack([
-                self.get_image_embeddings(pixel_values[:, i, :, :, :], self.vision_encoder)
-                for i in range(num)
-            ], dim=stack_dim)
+            
+            # Always stack along dim 1 to maintain (bs, num, ...) structure
+            # Even if bs=1, we want (1, num, ...)
+            stack_dim = 1
+            
+            vision_tensors_list = []
+            for i in range(num):
+                # Ensure we catch any shape issues from CLIP
+                try:
+                    vt = self.get_image_embeddings(pixel_values[:, i, :, :, :], self.vision_encoder)
+                    vision_tensors_list.append(vt)
+                except Exception as e:
+                    print(f"[ERROR] get_image_embeddings failed for image {i}: {e}")
+                    raise e
+
+            vision_tensors = torch.stack(vision_tensors_list, dim=stack_dim)
+            
             hidden_states = self.inject_visual_embeddings(tokens=input_ids, hidden_states=hidden_states, vision_tensors=vision_tensors, seqlen=seq_length)
+
         return hidden_states
 
     def forward(self,
@@ -121,6 +134,57 @@ class VisualVV(VV):
                 labels: Optional[torch.Tensor] = None,
                 pixel_values: Optional[torch.FloatTensor] = None,
                 **kwargs): 
+        
+        # --- Debugging: Check input_ids for out-of-bounds values ---
+        if input_ids is not None:
+            # We use a non-blocking check first to avoid perf hit if possible, 
+            # but for debugging we force CPU sync.
+            try:
+                # Check max value on CPU to avoid device-side assert crashing the process without info
+                input_ids_cpu = input_ids.detach().cpu()
+                max_val = input_ids_cpu.max().item()
+                min_val = input_ids_cpu.min().item()
+                
+                # Double check embedding weight shape
+                if hasattr(self, 'token_embedding_table'):
+                    vocab_dim = self.token_embedding_table.weight.shape[0]
+                    if vocab_dim != self.config.vocab_size:
+                        print(f"\n[FATAL ERROR] Embedding size mismatch! Weight: {vocab_dim}, Config: {self.config.vocab_size}")
+                        raise ValueError(f"Embedding mismatch: {vocab_dim} vs {self.config.vocab_size}")
+                    if max_val >= vocab_dim:
+                         print(f"\n[FATAL ERROR] Input ID {max_val} >= Embedding size {vocab_dim}")
+                         bad_indices = (input_ids_cpu >= vocab_dim).nonzero(as_tuple=False)
+                         print(f"Bad indices (first 5): {bad_indices[:5]}")
+                         print(f"Bad values: {input_ids_cpu[bad_indices[:5][:, 0], bad_indices[:5][:, 1]]}")
+                         raise ValueError(f"Input ID out of bounds: {max_val} >= {vocab_dim}")
+
+                if max_val >= self.config.vocab_size:
+                    print(f"\n[FATAL ERROR] Found input_id {max_val} >= vocab_size {self.config.vocab_size}")
+                    # Find specific indices
+                    bad_indices = (input_ids_cpu >= self.config.vocab_size).nonzero(as_tuple=False)
+                    print(f"Bad indices (first 5): {bad_indices[:5]}")
+                    print(f"Bad values: {input_ids_cpu[bad_indices[:5][:, 0], bad_indices[:5][:, 1]]}")
+                    raise ValueError(f"Input ID out of bounds: {max_val} >= {self.config.vocab_size}")
+                
+                if min_val < 0:
+                    print(f"\n[FATAL ERROR] Found negative input_id {min_val}")
+                    raise ValueError(f"Input ID negative: {min_val}")
+
+                if labels is not None:
+                     labels_cpu = labels.detach().cpu()
+                     # Ignore -100
+                     mask = labels_cpu != -100
+                     if mask.any():
+                         max_label = labels_cpu[mask].max().item()
+                         if max_label >= self.config.vocab_size:
+                             print(f"\n[FATAL ERROR] Found label {max_label} >= vocab_size {self.config.vocab_size}")
+                             raise ValueError(f"Label out of bounds: {max_label}")
+                     
+            except Exception as e:
+                print(f"[Debug Check Failed] {e}")
+                raise e
+        # -----------------------------------------------------------
+
         batch_size, seq_length = input_ids.shape
         x = self.token_embedding_table(input_ids)
 

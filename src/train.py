@@ -20,9 +20,10 @@ except Exception:
 import glob
 import argparse
 import torch
-from configs.model import VVConfig
+from configs.model import VVConfig, VisualVVConfig
 from model import VV
-from data.dataset import PretrainDataset
+from model.model_vlm import VisualVV
+from data.dataset import PretrainDataset, VLMPretrainDataset, VLMSFTDataset
 from training import DynamicTrainer
 from transformers import TrainingArguments, AutoTokenizer
 
@@ -30,12 +31,27 @@ class ModelTrainer:
     """
     模型训练管理器，封装了训练流程的各个环节
     """
-    def __init__(self, mode):
+    def __init__(self, mode, use_vlm=False):
         self.mode = mode
+        self.use_vlm = use_vlm
         self.root_path = root_path
         self.dataset_root = os.path.join(self.root_path, 'src', 'data', 'dataset')
         self.checkpoints_root = os.path.join(self.root_path, 'models', 'checkpoints')
         self.tokenizer_dir = os.path.join(self.dataset_root, 'tokenizer')
+        # VLM 视觉模型路径
+        # 优先查找本地已下载的模型：d:\Axon\ANN\llm\vv\models\clip-vit-base-patch16
+        local_vision_model_path = os.path.join(self.root_path, 'models', 'clip-vit-base-patch16')
+        if os.path.exists(local_vision_model_path):
+             self.vision_model_path = local_vision_model_path
+             print(f"[System] 检测到本地视觉模型: {self.vision_model_path}")
+        else:
+             # Fallback: 默认的 vision_model 目录或 HuggingFace ID
+             default_path = os.path.join(self.dataset_root, 'vision_model')
+             if os.path.exists(default_path):
+                 self.vision_model_path = default_path
+             else:
+                 self.vision_model_path = "openai/clip-vit-base-patch32"
+
         self.resume_from_checkpoint = None
         self.init_weights_path = None
         self._init_config()
@@ -46,8 +62,13 @@ class ModelTrainer:
     def _init_config(self):
         """初始化训练配置和路径"""
         if self.mode == 'pretrain':
-            self.train_bin = os.path.join(self.dataset_root, 'pretrain', 'pretrain_data.bin')
-            self.output_dir = os.path.join(self.checkpoints_root, 'pretrain')
+            if self.use_vlm:
+                self.train_bin = os.path.join(self.dataset_root, 'vlm', 'pretrain.bin')
+                self.output_dir = os.path.join(self.checkpoints_root, 'vlm_pretrain')
+            else:
+                self.train_bin = os.path.join(self.dataset_root, 'pretrain', 'pretrain_data.bin')
+                self.output_dir = os.path.join(self.checkpoints_root, 'pretrain')
+            
             self.final_save_path = os.path.join(self.output_dir, 'final')
             self.learning_rate = 3e-4
             self.weight_decay = 0.1
@@ -62,8 +83,13 @@ class ModelTrainer:
                 print(f"[System] 模式: 重新预训练 (Start from scratch)")
 
         elif self.mode == 'finetune':
-            self.train_bin = os.path.join(self.dataset_root, 'finetune', 'finetune_data.bin')
-            self.output_dir = os.path.join(self.checkpoints_root, 'finetune')
+            if self.use_vlm:
+                self.train_bin = os.path.join(self.dataset_root, 'vlm', 'sft.bin')
+                self.output_dir = os.path.join(self.checkpoints_root, 'vlm_finetune')
+            else:
+                self.train_bin = os.path.join(self.dataset_root, 'finetune', 'finetune_data.bin')
+                self.output_dir = os.path.join(self.checkpoints_root, 'finetune')
+
             self.final_save_path = os.path.join(self.output_dir, 'final')
             self.learning_rate = 5e-5
             self.weight_decay = 0.02
@@ -72,7 +98,11 @@ class ModelTrainer:
             if self.resume_from_checkpoint:
                 print(f"[System] 模式: 继续微调 (Resume from {self.resume_from_checkpoint})")
             else:
-                self.init_weights_path = os.path.join(self.checkpoints_root, 'pretrain', 'final')
+                # VLM 微调时，尝试从 VLM 预训练模型加载
+                if self.use_vlm:
+                    self.init_weights_path = os.path.join(self.checkpoints_root, 'pretrain', 'final')
+                else:
+                    self.init_weights_path = os.path.join(self.checkpoints_root, 'pretrain', 'final')
                 print(f"[System] 模式: 开始微调 (Load weights from {self.init_weights_path})")
         
         else: raise ValueError(f"不支持的训练模式: {self.mode}")
@@ -80,7 +110,12 @@ class ModelTrainer:
     def prepare_data(self):
         """准备数据：加载数据集并划分训练/验证集"""
         print(f"[Data] 正在加载数据集: {self.train_bin}")
-        dataset = PretrainDataset(self.train_bin)
+        
+        if self.use_vlm:
+            dataset = VLMPretrainDataset(self.train_bin, vision_model_path=self.vision_model_path)
+        else:
+            dataset = PretrainDataset(self.train_bin)
+
         val_size = min(500, int(len(dataset) * 0.01)) if len(dataset) > 500 else 1
         train_size = len(dataset) - val_size
         self.train_dataset, self.val_dataset = torch.utils.data.random_split(
@@ -91,15 +126,33 @@ class ModelTrainer:
     def prepare_model(self):
         """准备模型：初始化 Tokenizer、Config 和 Model，并加载权重"""
         self.tokenizer = AutoTokenizer.from_pretrained(self.tokenizer_dir)
-        config = VVConfig(
-            vocab_size=len(self.tokenizer),
-            bos_token_id=self.tokenizer.bos_token_id,
-            eos_token_id=self.tokenizer.eos_token_id,
-            pad_token_id=self.tokenizer.pad_token_id
-        )
+        
+        if self.use_vlm:
+            config = VisualVVConfig(
+                vocab_size=len(self.tokenizer),
+                bos_token_id=self.tokenizer.bos_token_id,
+                eos_token_id=self.tokenizer.eos_token_id,
+                pad_token_id=self.tokenizer.pad_token_id,
+                vision_model_path=self.vision_model_path
+            )
+        else:
+            config = VVConfig(
+                vocab_size=len(self.tokenizer),
+                bos_token_id=self.tokenizer.bos_token_id,
+                eos_token_id=self.tokenizer.eos_token_id,
+                pad_token_id=self.tokenizer.pad_token_id
+            )
+            
         # 如果是预训练模式 (pretrain)，强制重置 rope_ntk_alpha = 1.0
         if self.mode == 'pretrain': config.rope_ntk_alpha = 1.0
-        self.model = VV(config) # 初始化模型
+        
+        if self.use_vlm:
+            if VisualVV is None:
+                raise ImportError("无法导入 VisualVV，请检查 src/model/model_vlm.py 是否存在以及相关依赖是否安装")
+            self.model = VisualVV(config)
+        else:
+            self.model = VV(config) # 初始化模型
+            
         # 加载权重逻辑：如果有初始化权重路径，尝试加载
         if self.init_weights_path:
             print(f"正在从 {self.init_weights_path} 加载模型权重...")
@@ -110,7 +163,7 @@ class ModelTrainer:
         trainable_params = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
         param_info = (
              f"{'='*30}\n"
-             f" 模型参数信息:\n"
+             f" 模型参数信息 ({'VLM' if self.use_vlm else 'LLM'}):\n"
              f"  - 词表大小: {len(self.tokenizer)}\n"
              f"  - 总参数量: {total_params:,} ({total_params / 1e8:.4f} 亿)\n"
              f"  - 可训练参数量: {trainable_params:,} ({trainable_params / 1e8:.4f} 亿)\n"
@@ -165,6 +218,7 @@ class ModelTrainer:
             dataloader_num_workers=4, # 多进程加载数据
             dataloader_pin_memory=True, # 锁页内存，加速 CPU 到 GPU 传输
             max_grad_norm=10.0, # 梯度裁剪，防止梯度爆炸
+            disable_tqdm=False, # 强制开启进度条
         )
         trainer = DynamicTrainer(model=self.model, args=training_args, train_dataset=self.train_dataset, eval_dataset=self.val_dataset, tokenizer=self.tokenizer)
         print(f"[System] 开始 {self.mode} 模式训练...")
@@ -188,10 +242,22 @@ class ModelTrainer:
         if not path or not os.path.exists(path): return False
         bin_path = os.path.join(path, "pytorch_model.bin")
         try:
-            model.load_state_dict(torch.load(bin_path, map_location='cpu', weights_only=True))
-            print(f"[System] 成功加载 bin 权重: {bin_path}")
+            state_dict = torch.load(bin_path, map_location='cpu', weights_only=True)
+            # 使用 strict=False 允许部分加载 (如 LLM -> VLM)
+            missing, unexpected = model.load_state_dict(state_dict, strict=False)
+            
+            print(f"[System] 成功从 {bin_path} 加载权重")
+            if missing:
+                print(f"  [Info] 缺失权重 (将保持初始化状态): {len(missing)} 个 keys")
+                print(f"  示例: {missing[:3]} ...")
+            if unexpected:
+                print(f"  [Info] 未匹配权重 (将被忽略): {len(unexpected)} 个 keys")
+                
             return True
-        except Exception as e: print(f"[Error] 加载权重失败: {e}")
+        except Exception as e: 
+            print(f"[Error] 加载权重失败: {e}")
+            import traceback
+            traceback.print_exc()
         return False
 
     @staticmethod
@@ -207,11 +273,11 @@ class ModelTrainer:
         print(f"[System] 动态计算得到的 Gradient Accumulation Steps: {grad_steps}")
         return train_batch_size, grad_steps
 
-def train(mode, num_train_epochs=1, eval_steps=500, save_steps=500):
+def train(mode, use_vlm=False, num_train_epochs=1, eval_steps=500, save_steps=500):
     """
     保持向后兼容的 train 函数入口
     """
-    trainer = ModelTrainer(mode)
+    trainer = ModelTrainer(mode, use_vlm=use_vlm)
     trainer.num_train_epochs = num_train_epochs
     trainer.eval_steps = eval_steps
     trainer.save_steps = save_steps
@@ -228,4 +294,4 @@ if __name__ == "__main__":
         help="训练模式: pretrain (预训练) 或 finetune (微调)"
     )
     args = parser.parse_args()
-    train(mode=args.mode, num_train_epochs=1, eval_steps=500, save_steps=500)
+    train(mode=args.mode, use_vlm=True, num_train_epochs=1, eval_steps=500, save_steps=500)
