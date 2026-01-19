@@ -21,7 +21,7 @@ class VisualVV(VV):
         if not os.path.exists(model_path):
             return None, None
         model = CLIPModel.from_pretrained(model_path)
-        processor = CLIPProcessor.from_pretrained(model_path)
+        processor = CLIPProcessor.from_pretrained(model_path, use_fast=True)
         # 冻结 vision_encoder 的所有参数
         for param in model.parameters():
             param.requires_grad = False
@@ -29,7 +29,7 @@ class VisualVV(VV):
 
     @staticmethod
     def image2tensor(image, processor):
-        if image.mode in ['RGBA', 'LA']: image = image.convert('RGB')
+        if image.mode != 'RGB': image = image.convert('RGB')
         inputs = processor(images=image, return_tensors="pt")['pixel_values']
         return inputs
 
@@ -102,6 +102,9 @@ class VisualVV(VV):
         处理视觉输入并将图像嵌入融合到文本隐藏状态中
         """
         if pixel_values is not None:
+            # 确保内存连续性，防止 CUDA Error
+            pixel_values = pixel_values.contiguous()
+            
             if len(pixel_values.shape) == 6:
                 pixel_values = pixel_values.squeeze(2)
             bs, num, c, im_h, im_w = pixel_values.shape

@@ -228,4 +228,4 @@ if __name__ == "__main__":
         help="训练模式: pretrain (预训练) 或 finetune (微调)"
     )
     args = parser.parse_args()
-    train(mode=args.mode, num_train_epochs=10, eval_steps=500, save_steps=500)
+    train(mode=args.mode, num_train_epochs=1, eval_steps=500, save_steps=500)

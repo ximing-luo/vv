@@ -30,7 +30,7 @@ class VVConfig:
 class VisualVVConfig(VVConfig):
     # 视觉投影配置
     vision_hidden_dim: int = 768
-    vision_model_path: str = "./model/vision_model/clip-vit-base-patch16"
+    vision_model_path: str = "./models/clip-vit-base-patch16"
     image_special_token: str = '@' * 196
     image_ids: List[int] = field(default_factory=lambda: [34] * 196)
 
