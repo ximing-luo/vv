@@ -51,7 +51,7 @@ class ModelTrainer:
             self.weight_decay = 0.1
         else:
             self.learning_rate = 5e-5
-            self.weight_decay = 0.02
+            self.weight_decay = 0.08
 
         self._setup_paths_and_weights()
         self.resume_from_checkpoint = self._get_latest_checkpoint(self.output_dir)
@@ -61,13 +61,11 @@ class ModelTrainer:
         print(f"[System] 检查点目录: {self.output_dir}")
         print(f"[System] 成品输出路径: {self.model_save_path}")
 
-        # 逻辑调整：如果明确指定了 init_weights_path (通常是跨阶段加载)，则优先使用它，而不是从当前 output_dir 恢复
-        if self.init_weights_path:
-            print(f"[System] 状态: 开始【新阶段训练】，将加载初始权重: {self.init_weights_path}")
-            # 如果是新阶段，我们不希望从旧阶段的 optimizer/step 恢复，所以设为 None
-            self.resume_from_checkpoint = None
-        elif self.resume_from_checkpoint:
+        if self.resume_from_checkpoint:
             print(f"[System] 状态: 检测到检查点，将【继续训练】(Resume from {self.resume_from_checkpoint})")
+            self.init_weights_path = None
+        elif self.init_weights_path:
+            print(f"[System] 状态: 开始【新阶段训练】，将加载初始权重: {self.init_weights_path}")
         else:
             print(f"[System] 状态: 无初始权重且无检查点，将使用【随机初始化】开始训练")
 
@@ -83,7 +81,7 @@ class ModelTrainer:
         )
         # 如果是预训练模式 (pretrain)，强制重置 rope_ntk_alpha = 1.0
         if self.mode == 'pretrain': self.config.rope_ntk_alpha = 1.0
-        self.model = VisualVV(self.config) if self.is_vlm else VV(self.config) # 初始化模型
+        self.model = VisualVV(self.config, freeze_llm=self.is_freeze_llm) if self.is_vlm else VV(self.config) # 初始化模型
         # 加载权重逻辑：如果有初始化权重路径，尝试加载
         if self.init_weights_path:
             print(f"正在从 {self.init_weights_path} 加载模型权重...")
@@ -154,7 +152,7 @@ class ModelTrainer:
             metric_for_best_model="eval_loss", # 以验证集 Loss 作为评估指标
             greater_is_better=False, # Loss 越小越好
             # 5. 日志与监控
-            logging_steps=10, # 每隔多少步打印一次日志
+            logging_steps=5, # 每隔多少步打印一次日志
             # 6. 硬件加速与数据加载
             # T4 (Compute Capability 7.5) 虽然 PyTorch 可能报告支持 BF16，但实际上硬件不支持，会导致速度极慢
             # 因此这里增加严格的 Compute Capability >= 8 (Ampere) 检查
@@ -230,19 +228,21 @@ class ModelTrainer:
                 self.train_bin = os.path.join(self.dataset_root, 'vlm', 'pretrain.bin')
                 # 初始权重从 LLM 微调的最新检查点取
                 self.init_weights_path = self._get_latest_checkpoint(LLM_FINETUNE_DIR)
+                self.is_freeze_llm = True
             else:
                 # 场景 7 & 8: VLM 微调
                 self.output_dir = VLM_FINETUNE_DIR
                 self.train_bin = os.path.join(self.dataset_root, 'vlm', 'sft.bin')
                 # 初始权重从 VLM 预训练的最新检查点取
                 self.init_weights_path = self._get_latest_checkpoint(VLM_PRETRAIN_DIR)
+                self.is_freeze_llm = False
 
     @staticmethod
     def _dynamic_batch_size(model_config):
         """动态计算 Batch Size 和 Gradient Accumulation Steps"""
         # 计算最大序列长度，考虑 NTK 扩展
         max_seq_len = int(model_config.max_seq_len * model_config.rope_ntk_alpha)
-        train_batch_size = max(1, int(4096 // max_seq_len)) # 单卡最大吞吐量 4096 tokens
+        train_batch_size = max(1, int((2048+1024) // max_seq_len)) # 单卡最大吞吐量 2048 tokens
         grad_steps = max(1, int(64 // train_batch_size))
         # train_batch_size = 64
         # grad_steps = 1
@@ -250,7 +250,7 @@ class ModelTrainer:
         print(f"[System] 动态计算得到的 Gradient Accumulation Steps: {grad_steps}")
         return train_batch_size, grad_steps
 
-def train(mode, is_vlm=False, num_train_epochs=1, eval_steps=500, save_steps=500):
+def train(mode, is_vlm=False, num_train_epochs=1, eval_steps=500, save_steps=500, is_freeze_llm=True):
     """
     保持向后兼容的 train 函数入口
     """
@@ -258,9 +258,10 @@ def train(mode, is_vlm=False, num_train_epochs=1, eval_steps=500, save_steps=500
     trainer.num_train_epochs = num_train_epochs
     trainer.eval_steps = eval_steps
     trainer.save_steps = save_steps
+    # trainer.is_freeze_llm = is_freeze_llm
     trainer.train()
 
 if __name__ == "__main__":
-    mode = 'finetune' # pretrain or finetune
+    mode = 'pretrain' # pretrain or finetune
     is_vlm = True # 是否是训练vlm
     train(mode=mode, is_vlm=is_vlm, num_train_epochs=1, eval_steps=500, save_steps=500)

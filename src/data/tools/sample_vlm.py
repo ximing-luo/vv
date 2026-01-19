@@ -233,4 +233,4 @@ if __name__ == "__main__":
     sampler = VLMSampler(BASE_DATABASE_DIR, METADATA_ROOT_DIR)
     
     # 运行采样和预览
-    sampler.run_minimind_v_pipeline(target_gb=0.2, num_preview=5, split_size_mb=20)
+    sampler.run_minimind_v_pipeline(target_gb=1.5, num_preview=5, split_size_mb=20)

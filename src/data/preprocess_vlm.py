@@ -98,9 +98,9 @@ class VLMDataProcessor(DataProcessor):
                     # 2. 处理对话
                     if conversations:
                         prompt = self.tokenizer.apply_chat_template(conversations, tokenize=False)
-                        # 插入图像占位符
+                        # 替换文本中的<image>标签为图像特殊token
                         if valid_image_bytes is not None:
-                            prompt = self.visual_config.image_special_token + prompt
+                            prompt = prompt.replace('<image>', self.visual_config.image_special_token)
                         
                         enc = self.tokenizer.encode(prompt)
                         if len(enc) > self.max_seq_len:
@@ -280,4 +280,4 @@ def preprocess_vlm(num_workers=1):
         )
 
 if __name__ == "__main__":
-    preprocess_vlm()
+    preprocess_vlm(num_workers=2)

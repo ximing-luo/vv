@@ -80,6 +80,14 @@ class DynamicTrainer(Trainer):
         )
         print(f"[DynamicTrainer] 已初始化，内置回调已注入")
 
+    def log(self, logs: dict[str, float], start_time: Optional[float] = None) -> None:
+        """
+        重写 log 方法，将浮点数保留 5 位小数，并传递 start_time
+        """
+        for k, v in logs.items():
+            logs[k] = round(v, 5)
+        super().log(logs, start_time)
+
     def get_train_dataloader(self):
         # 使用 TokenBucketSampler 实现固定 Token 量的动态批处理
         # max_tokens = max_seq_len * batch_size * rope_ntk_alpha

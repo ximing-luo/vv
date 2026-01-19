@@ -7,12 +7,16 @@ from .backbone.vision import VisionProjector
 from .model import VV
 
 class VisualVV(VV):
-    def __init__(self, config=None):
+    def __init__(self, config=None, freeze_llm=True):
         super().__init__(config)
-        self.config = config
+        if freeze_llm:
+            for param in self.parameters():
+                param.requires_grad = False
+            print(f"[Model] 已冻结 LLM 参数，仅训练 Vision Projector")
         # Vision Projector (将视觉特征映射到文本维度)
         self.projector = VisionProjector(vision_hidden_dim=config.vision_hidden_dim, hidden_size=config.hidden_dim)
         self.vision_encoder, self.processor = self.get_vision_model(config.vision_model_path)
+        self.apply(self._init_weights)
 
     @staticmethod
     def get_vision_model(model_path: str):
@@ -107,24 +111,29 @@ class VisualVV(VV):
             
             if len(pixel_values.shape) == 6:
                 pixel_values = pixel_values.squeeze(2)
+            
+            # pixel_values shape: (bs, num_images, c, h, w)
             bs, num, c, im_h, im_w = pixel_values.shape
             
-            # Always stack along dim 1 to maintain (bs, num, ...) structure
-            # Even if bs=1, we want (1, num, ...)
-            stack_dim = 1
+            # 将 batch 和 image 维度合并，一次性通过 vision_encoder，极大提高利用率
+            # (bs * num, c, im_h, im_w)
+            flat_pixel_values = pixel_values.view(bs * num, c, im_h, im_w)
             
-            vision_tensors_list = []
-            for i in range(num):
-                # Ensure we catch any shape issues from CLIP
-                try:
-                    vt = self.get_image_embeddings(pixel_values[:, i, :, :, :], self.vision_encoder)
-                    vision_tensors_list.append(vt)
-                except Exception as e:
-                    print(f"[ERROR] get_image_embeddings failed for image {i}: {e}")
-                    raise e
+            try:
+                # 获取所有图片的 embedding
+                # shape: (bs * num, patches, vision_hidden_dim)
+                with torch.no_grad():
+                    outputs = self.vision_encoder(pixel_values=flat_pixel_values)
+                    # 去掉 CLS token (index 0)
+                    vision_tensors = outputs.last_hidden_state[:, 1:, :]
+                
+                # 恢复成 (bs, num, patches, vision_hidden_dim)
+                vision_tensors = vision_tensors.view(bs, num, vision_tensors.size(1), vision_tensors.size(2))
+                
+            except Exception as e:
+                print(f"[ERROR] Vision encoder forward failed: {e}")
+                raise e
 
-            vision_tensors = torch.stack(vision_tensors_list, dim=stack_dim)
-            
             hidden_states = self.inject_visual_embeddings(tokens=input_ids, hidden_states=hidden_states, vision_tensors=vision_tensors, seqlen=seq_length)
 
         return hidden_states
