@@ -1,19 +1,15 @@
 import os
 import sys
-current_file_path = os.path.abspath(__file__) 
-src_path = os.path.dirname(os.path.dirname(current_file_path))
-vv_path = os.path.dirname(src_path)
-project_root = os.path.dirname(vv_path)
-for path in [src_path, vv_path, project_root]:
-    if path not in sys.path:
-        sys.path.insert(0, path)
-
+from pathlib import Path
 import torch
 from PIL import Image
-from configs.model import VVConfig, VisualVVConfig
-from model.model import VV
-from model.model_vlm import VisualVV
 from transformers import AutoTokenizer, CLIPImageProcessor
+# 将项目根目录添加到 sys.path 以支持本地模块导入
+root = str(Path(__file__).resolve().parents[2])
+if root not in sys.path:
+    sys.path.insert(0, root)
+from configs.model import VVConfig, VisualVVConfig
+from src.model import VV, VisualVV
 
 def load_model(model_dir, device='cuda' if torch.cuda.is_available() else 'cpu'):
     """
@@ -21,18 +17,16 @@ def load_model(model_dir, device='cuda' if torch.cuda.is_available() else 'cpu')
     """
     if not os.path.exists(model_dir): raise FileNotFoundError(f"模型目录 {model_dir} 不存在")
     print(f"正在从 {model_dir} 加载模型...")
-    tokenizer = AutoTokenizer.from_pretrained(model_dir)
-    config = VisualVVConfig(
-        vocab_size=len(tokenizer),
-        bos_token_id=tokenizer.bos_token_id,
-        eos_token_id=tokenizer.eos_token_id,
-        pad_token_id=tokenizer.pad_token_id
-    )
-    
-    # 初始化模型
-    model = VisualVV(config)
-    weights_path = os.path.join(model_dir, "pytorch_model.bin")
     try:
+        tokenizer = AutoTokenizer.from_pretrained(model_dir)
+        config = VisualVVConfig(
+            vocab_size=len(tokenizer),
+            bos_token_id=tokenizer.bos_token_id,
+            eos_token_id=tokenizer.eos_token_id,
+            pad_token_id=tokenizer.pad_token_id
+        )
+        model = VisualVV(config)
+        weights_path = os.path.join(model_dir, "pytorch_model.bin")
         state_dict = torch.load(weights_path, map_location=device)
         print(f"成功加载权重: {weights_path}")
         model.load_state_dict(state_dict)
@@ -85,11 +79,9 @@ def stream_inference(model, tokenizer, input_data, temperature=1.3, max_new_toke
     for next_token_tensor in model.generate_stream(input_tensor, max_new_tokens=max_new_tokens, temperature=temperature, top_k=top_k, pixel_values=pixel_values):
         token_id = next_token_tensor[0].item()
         if token_id == tokenizer.eos_token_id: break
-        
         tokens_cached.append(token_id)
         full_text = tokenizer.decode(tokens_cached, skip_special_tokens=True)
         if full_text.endswith("\ufffd"): continue # 跳过 UTF-8 截断产生的乱码
-            
         new_text = full_text[printed_len:]
         if new_text:
             _smart_print(new_text, output_file, end="", flush=True)
@@ -105,26 +97,11 @@ def run_test_suite(model, tokenizer, device, mode, input_data, output_file, test
     """
     for temp_val, tk_val, step, is_temp_fixed in test_configs:
         for i in range(8):
-            temperature = temp_val if is_temp_fixed else temp_val + i * step
+            temp = temp_val if is_temp_fixed else temp_val + i * step
             top_k = tk_val + i * step if is_temp_fixed else tk_val
-            
-            info = f"\n温度: {temperature:.2f}, top_k: {int(top_k) if is_temp_fixed else top_k}"
-            print(info)
-            output_file.write(info + "\n")
-            output_file.flush()
-            
-            # 每个配置运行两次生成
-            for _ in range(2):
-                stream_inference(
-                    model, tokenizer, input_data, 
-                    output_file=output_file, 
-                    max_new_tokens=max_new_tokens, 
-                    mode=mode, 
-                    device=device, 
-                    temperature=temperature, 
-                    top_k=top_k,
-                    image_path=image_path
-                )
+            _smart_print(f"\n温度: {temp:.2f}, top_k: {int(top_k)}", output_file)
+            for _ in range(2): # 每个配置运行两次
+                stream_inference(model, tokenizer, input_data, output_file=output_file, max_new_tokens=max_new_tokens, mode=mode, device=device, temperature=temp, top_k=top_k, image_path=image_path)
 
 def test():
     # 1. 获取模型根目录
@@ -142,7 +119,7 @@ def test():
         "    就这样感受着身体被一点点嚼碎，也许是个不错的死法？\n"
     )
     image = ("请描述这张图片。<image>")    
-    image_path = r"D:\Axon\ANN\llm\vv\src\data\database\gongjy\minimind-v_dataset\eval_images\彩虹瀑布-Rainbow-Falls .jpg"
+    image_path = r".\src\data\database\gongjy\minimind-v_dataset\eval_images\彩虹瀑布-Rainbow-Falls .jpg"
 
     model_path = os.path.join(os.path.dirname(checkpoints_root), "vv")
     model, tokenizer, device = load_model(model_path)
@@ -167,81 +144,36 @@ def test():
         )
 
 def main():
-    # 1. 获取模型根目录
-    models_path = os.path.join(vv_path, "models")
-    checkpoints_root = os.path.join(models_path, "checkpoints")
-    
-    print("="*30)
-    print("  vv 模型推理工具")
-    print("="*30)
-    
-    # 2. 选择模式
-    print("\n请选择推理模式:")
-    print("1. 聊天模式 (Chat) - 自动加载微调模型")
-    print("2. 续写模式 (Pretrain) - 自动加载预训练模型")
-    print("3. 多模态模式 (VLM) - 自动加载 VLM 模型")
-    
+    print("="*30 + "\n  vv 模型推理工具\n" + "="*30)
+    print("\n请选择推理模式:\n1. 聊天模式 (Chat)\n2. 续写模式 (Pretrain)\n3. 多模态模式 (VLM)")
     choice = input("\n请输入编号 (默认 1): ").strip()
     mode = 'chat' if choice == '1' else 'pretrain' if choice == '2' else 'vlm'
     
-    # 3. 自动查找模型
-    model_path = os.path.join(os.path.dirname(checkpoints_root), "vv")
-    if not model_path:
-        print(f"\n[错误] 在 {checkpoints_root} 下找不到模型权重。")
-        sys.exit(1)
-    
-    # 加载
-    try:
-        model, tokenizer, device = load_model(model_path)
-    except Exception as e:
-        print(f"\n[加载失败] {e}")
-        sys.exit(1)
-    
-    print(f"\n当前激活模式: {'聊天模式' if mode == 'chat' else '续写模式' if mode == 'pretrain' else '多模态模式'}")
-    print("输入 'q' 退出，输入 'clear' 清空对话历史。")
+    model_path = os.path.join(root, "models", "vv")
+    model, tokenizer, device = load_model(model_path)
+    print(f"\n当前模式: {mode}\n输入 'q' 退出，'clear' 清空历史。")
 
-    # 循环对话
     messages = []
     while True:
         try:
-            if mode == 'chat':
-                prompt = input("\nUser > ")
-            elif mode == 'pretrain':
-                prompt = input("\n续写输入 > ")
+            image_path = None
+            if mode == 'vlm':
+                image_path = input("\n图片路径 > ").strip().strip('"\'')
+                if not os.path.exists(image_path): continue
+                prompt = input("User > ") or "描述这张图片<image>。"
             else:
-                # 多模态模式：处理图片和文本
-                image_path = input("\n请输入图片路径 (绝对路径): ").strip().strip('"').strip("'")
-                if not os.path.exists(image_path):
-                    print(f"\n[错误] 图片路径 {image_path} 不存在。")
-                    continue
-                prompt = input("\nUser > ")
-                if not prompt: prompt = "描述这张图片<image>。"
-                
+                prompt = input(f"\n{'User' if mode == 'chat' else '续写'} > ")
+            
             if prompt.lower() == 'q': break
-            if prompt.lower() == 'clear':
-                messages = []
-                print("对话历史已清空。")
-                continue
-            if not prompt.strip():
-                continue
+            if prompt.lower() == 'clear': messages = []; continue
+            if not prompt.strip(): continue
             
-            if mode == 'chat':
-                # 聊天模式：累加历史消息
-                messages.append({"role": "user", "content": prompt})
-                full_response = stream_inference(model, tokenizer, messages, device=device, mode=mode)
-                messages.append({"role": "assistant", "content": full_response})
-            elif mode == 'pretrain':
-                # 续写模式：确保每次都是独立的输入，不带任何历史和标记
-                stream_inference(model, tokenizer, prompt, temperature=1.3, top_k=75, device=device, mode=mode)
-            else:
-                # 多模态模式：处理图片和文本
-                stream_inference(model, tokenizer, prompt, temperature=1.3, top_k=75, device=device, mode=mode, image_path=image_path)
-            
-        except KeyboardInterrupt:
-            break
-    
+            input_data = messages + [{"role": "user", "content": prompt}] if mode == 'chat' else prompt
+            res = stream_inference(model, tokenizer, input_data, device=device, mode=mode, image_path=image_path)
+            if mode == 'chat': messages.extend([{"role": "user", "content": prompt}, {"role": "assistant", "content": res}])
+        except KeyboardInterrupt: break
     print("\n推理结束。")
 
 if __name__ == "__main__":
-    # test()
-    main()
+    test()
+    # main()

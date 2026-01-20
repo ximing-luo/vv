@@ -1,6 +1,6 @@
 import torch
 from transformers import Trainer, EarlyStoppingCallback
-from data.dataset import TokenBucketSampler, dynamic_collate_fn
+from src.data.dataset import TokenBucketSampler, dynamic_collate_fn
 from .tools.system import SystemControlCallback
 from .tools.log import CustomTensorBoardCallback
 from .tools.checkpoint import CheckpointCallback

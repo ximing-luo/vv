@@ -1,32 +1,27 @@
+import glob
 import os
 import sys
-
-from sympy import use
-# 将项目根目录（vv）和 src 目录添加到 sys.path
-root_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-src_path = os.path.join(root_path, 'src')
-for path in [root_path, src_path]:
-    if path not in sys.path:
-        sys.path.append(path)
+from pathlib import Path
+import torch
+from transformers import TrainingArguments, AutoTokenizer
+# 环境配置与安全检查绕过
 os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
-# 绕过 transformers 的 torch.load 安全检查 (CVE-2025-32434)
-# 针对某些版本 transformers.trainer 已经完成引用的情况，直接注入到模块中
 try:
+    # 绕过 transformers 的 torch.load 安全检查 (CVE-2025-32434)
     import transformers.utils.import_utils as import_utils
     import_utils.check_torch_load_is_safe = lambda: None
     import transformers.trainer as trainer
     trainer.check_torch_load_is_safe = lambda: None
 except Exception:
     pass
-
-import glob
-import torch
+# 将项目根目录添加到 sys.path 以支持本地模块导入
+root_path = str(Path(__file__).resolve().parents[1])
+if root_path not in sys.path:
+    sys.path.insert(0, root_path)
 from configs.model import VisualVVConfig
-from model import VV
-from model.model_vlm import VisualVV
-from data.dataset import PretrainDataset, VLMPretrainDataset
-from training import DynamicTrainer
-from transformers import TrainingArguments, AutoTokenizer
+from src.model import VV, VisualVV
+from src.data.dataset import PretrainDataset, VLMPretrainDataset
+from src.training import DynamicTrainer
 
 class ModelTrainer:
     """

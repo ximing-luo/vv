@@ -1,8 +1,6 @@
 import re
 import os
-import json
 from tokenizers import Tokenizer
-
 import argparse
 
 def get_byte_mapping():

@@ -9,16 +9,16 @@
 - dynamic_collate_fn ：将这组 Token 转化为 Tensor，并用 0 (Input) 和 -100 (Label) 进行 Padding。
 - Model Forward ：模型接收到形状为 [Batch, Seq_Len] 的 Tensor 开始计算
 """
+import io
+import struct
+import numpy as np
 import torch
 import torch.nn.utils.rnn as rnn_utils
-import numpy as np
-from torch.utils.data import Dataset, Sampler
-import struct
-import io
 from PIL import Image
-from src.model.model_vlm import VisualVV
-from configs.model import VisualVVConfig
+from torch.utils.data import Dataset, Sampler
 from transformers import CLIPImageProcessor
+from configs.model import VisualVVConfig
+from src.model import VisualVV
 
 class PretrainDataset(Dataset):
     """

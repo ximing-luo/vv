@@ -1,24 +1,20 @@
-import os
 import json
-import numpy as np
+import os
 import random
 import re
-from tqdm import tqdm
-import sys
 import struct
+import sys
 import itertools
 import multiprocessing as mp
-
-# 将项目根目录添加到 sys.path
-current_dir = os.path.dirname(os.path.abspath(__file__))
-src_dir = os.path.dirname(current_dir)
-project_root = os.path.dirname(src_dir)
-if project_root not in sys.path:
-    sys.path.append(project_root)
-if src_dir not in sys.path:
-    sys.path.append(src_dir)
-from configs.model import VVConfig
+from pathlib import Path
+import numpy as np
+from tqdm import tqdm
 from transformers import AutoTokenizer
+# 将项目根目录添加到 sys.path 以支持本地模块导入
+project_root = str(Path(__file__).resolve().parents[2])
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+from configs.model import VVConfig
 
 WORKER_PROCESSOR = None
 

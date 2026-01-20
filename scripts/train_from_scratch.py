@@ -1,13 +1,17 @@
 import os
-import sys
 import shutil
-root_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-src_path = os.path.join(root_path, 'src')
-for path in [root_path, src_path]:
-    if path not in sys.path:
-        sys.path.append(path)
+import sys
+from pathlib import Path
+
+# 将项目根目录添加到 sys.path 以支持本地模块导入
+root_path = Path(__file__).resolve().parents[1]
+if str(root_path) not in sys.path:
+    sys.path.insert(0, str(root_path))
+
 from src.data import DataSampler, clean_data, preprocess
 from src.train import train
+
+src_path = root_path / 'src'
 
 def sample():
     BASE_DATABASE_DIR = os.path.join(src_path, 'data', 'database')

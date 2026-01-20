@@ -1,6 +1,6 @@
 import os
 import json
-from utils.inference import stream_inference
+from src.utils.inference import stream_inference
 from transformers import TrainerCallback
 
 class InferenceCallback(TrainerCallback):

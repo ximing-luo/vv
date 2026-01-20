@@ -1,10 +1,10 @@
 import os
+from typing import Optional
 import torch
 import torch.nn.functional as F
-from typing import Optional
 from transformers import CLIPVisionModel, CLIPImageProcessor
 from .backbone.vision import VisionProjector
-from .model import VV
+from .model_llm import VV
 
 class VisualVV(VV):
     def __init__(self, config=None, freeze_llm=True):
