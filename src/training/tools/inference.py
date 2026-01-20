@@ -16,10 +16,6 @@ class InferenceCallback(TrainerCallback):
         model.eval()
         # 获取设备
         device = next(model.parameters()).device
-        # 处理 DDP 模型解包
-        unwrapped_model = model
-        if hasattr(model, "module"):
-            unwrapped_model = model.module
             
         for idx, case in enumerate(self.test_cases):
             prompt = case.get('prompt', "")
@@ -27,11 +23,15 @@ class InferenceCallback(TrainerCallback):
             max_new_tokens = case.get('max_new_tokens', 512)
             temperature = case.get('temperature', 1.3)
             top_k = case.get('top_k', 75)
+            image_path = case.get('image_path', None)
             
             print(f"\n{'='*20} 推理模拟 {idx+1}/{len(self.test_cases)} (Step: {state.global_step}, Mode: {mode}) {'='*20}")
             if mode == 'chat':
                 # 对话模式：构造消息列表
                 input_data = [{"role": "user", "content": prompt}]
+            elif mode == 'vlm':
+                # 视觉语言模型模式：直接使用字符串（stream_inference 会处理模板）
+                input_data = prompt
             else:
                 # 预训练模式：直接使用字符串
                 input_data = prompt
@@ -54,13 +54,14 @@ class InferenceCallback(TrainerCallback):
 
                     for _ in range(3):
                         for _ in stream_inference(
-                            unwrapped_model, self.tokenizer, input_data, 
+                            model, self.tokenizer, input_data, 
                             output_file=f, 
                             max_new_tokens=max_new_tokens, 
                             mode=mode, 
                             device=device, 
                             temperature=temperature, 
-                            top_k=top_k
+                            top_k=top_k,
+                            image_path=image_path
                         ):
                             continue
                 print(f"\n[System] 推理结果已保存至: {save_path}")
@@ -68,4 +69,4 @@ class InferenceCallback(TrainerCallback):
                 print(f"\n[Warning] 推理评估失败: {e}")
             print(f"\n{'='*50}\n")
 
-        unwrapped_model.train()
+        model.train()

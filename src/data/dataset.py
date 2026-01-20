@@ -16,7 +16,9 @@ from torch.utils.data import Dataset, Sampler
 import struct
 import io
 from PIL import Image
-from transformers import CLIPProcessor, CLIPImageProcessor
+from src.model.model_vlm import VisualVV
+from configs.model import VisualVVConfig
+from transformers import CLIPImageProcessor
 
 class PretrainDataset(Dataset):
     """
@@ -124,92 +126,59 @@ class SFTDataset(PretrainDataset):
         return X, Y
 
 class VLMDatasetMixin:
-    """
-    VLM 数据加载混入类：负责加载 .img, .img.idx, .img.len 文件并进行在线预处理
-    """
+    """VLM 数据加载混入类：通过内存映射高效加载图像"""
     def init_vlm_data(self, data_path, vision_model_path):
-        self.img_idx_path = data_path + ".img.idx"
-        self.img_path = data_path + ".img"
-        self.img_len_path = data_path + ".img.len"
-        
-        # 1. 加载 Sequence -> Image Index 映射
-        # .img.idx: [Header(Q), i32, i32, ...]
-        with open(self.img_idx_path, 'rb') as f:
-            _ = struct.unpack('<Q', f.read(8))[0] # Skip header
+        # 1. 加载 seq -> img_idx 映射
+        with open(data_path + ".img.idx", 'rb') as f:
+            f.seek(8) # 跳过 8 字节 header
             self.seq_to_img_idx = np.frombuffer(f.read(), dtype=np.int32)
 
-        # 2. 加载 Image Lengths 并计算 Offsets
-        # .img.len: [Header(Q), u32, u32, ...]
-        with open(self.img_len_path, 'rb') as f:
+        # 2. 加载图像长度并计算偏移量
+        with open(data_path + ".img.len", 'rb') as f:
             self.num_images = struct.unpack('<Q', f.read(8))[0]
             self.img_lengths = np.frombuffer(f.read(), dtype=np.uint32)
         
         self.img_offsets = np.zeros(len(self.img_lengths) + 1, dtype=np.uint64)
-        self.img_offsets[1:] = np.cumsum(self.img_lengths, dtype=np.uint64)
+        self.img_offsets[1:] = np.cumsum(self.img_lengths)
 
-        # 3. 内存映射原始图像数据 (.img)
-        self.img_data = np.memmap(self.img_path, mode='r')
-        # 训练时必须开启 do_normalize=True
-        self.processor = CLIPImageProcessor.from_pretrained(vision_model_path, use_fast=True)
-
-        print(f"[VLMDataset] 已加载图像索引: {self.num_images} 张图片")
+        # 3. 内存映射图像数据并初始化处理器
+        self.img_data = np.memmap(data_path + ".img", mode='r')
+        self.processor = CLIPImageProcessor.from_pretrained(vision_model_path)
+        print(f"[VLMDataset] 已加载 {self.num_images} 张图片")
 
     def get_image(self, seq_idx):
-        """
-        根据序列索引获取预处理后的图像 Tensor
-        """
-        if seq_idx >= len(self.seq_to_img_idx):
-            return None
-            
-        img_idx = self.seq_to_img_idx[seq_idx]
-        if img_idx == -1:
-            # 如果没有对应的图片，返回全黑图占位 (必须与正常图片维度一致)
-            # 假设 CLIP 输入为 224x224
+        """根据序列索引安全地获取预处理后的图像 Tensor"""
+        # 检查 seq_idx 有效性，并用 walrus 操作符获取 img_idx
+        if seq_idx >= len(self.seq_to_img_idx) or (img_idx := self.seq_to_img_idx[seq_idx]) == -1:
+            # 若无对应图片，返回全黑图占位 (维度需与 CLIP 输入一致)
             return torch.zeros((3, 224, 224), dtype=torch.float32)
             
-        # 获取原始 Bytes
-        offset = self.img_offsets[img_idx]
-        length = self.img_lengths[img_idx]
-        img_bytes = self.img_data[offset : offset + length]
-        
-        # 在线处理：Bytes -> PIL -> Tensor
+        # 根据索引获取图像字节流，并在线解码
         try:
+            offset = self.img_offsets[img_idx]
+            length = self.img_lengths[img_idx]
+            img_bytes = self.img_data[offset : offset + length]
             image = Image.open(io.BytesIO(img_bytes))
-            # 调用 Model 中的静态方法处理
-            from src.model.model_vlm import VisualVV
+            # 注意: VisualVV 应在文件顶部导入以提高性能
             pixel_values = VisualVV.image2tensor(image, self.processor).squeeze(0)
             return pixel_values
         except Exception as e:
-            print(f"[Error] Image decode failed for seq_idx {seq_idx}, img_idx {img_idx}: {e}")
-            # 返回全黑图防止 Crash
+            print(f"[Error] 图像解码失败 (seq_idx {seq_idx}, img_idx {img_idx}): {e}")
+            # 返回占位符防止因单张图片损坏而导致训练崩溃
             return torch.zeros((3, 224, 224))
 
 class VLMPretrainDataset(PretrainDataset, VLMDatasetMixin):
     def __init__(self, data_path, vision_model_path):
         super().__init__(data_path)
         self.init_vlm_data(data_path, vision_model_path)
-        
-        # 获取图像占位符 ID 以便在 Label 中进行 Mask
-        try:
-            from configs.model import VisualVVConfig
-            # 假设所有 image_ids 都是相同的 (e.g. 34)
-            self.image_token_id = VisualVVConfig().image_ids[0]
-        except ImportError:
-            print("[Warning] Could not import VisualVVConfig. Defaulting image_token_id to 34.")
-            self.image_token_id = 34
+        self.image_token_id = VisualVVConfig().image_ids[0]
 
     def __getitem__(self, idx):
         X, Y = super().__getitem__(idx)
         pixel_values = self.get_image(idx)
-        
-        # Mask 掉 Label 中的图像占位符
-        # 防止模型学习预测图像占位符 (e.g. '@')
         if self.image_token_id is not None:
-            # IMPORTANT: clone Y before modification because X and Y share memory (numpy view)
-            # Modifying Y in-place would also modify X (input_ids), causing invalid tokens (-100) in input
             Y = Y.clone()
             Y[Y == self.image_token_id] = -100
-            
         return X, Y, pixel_values
 
 class VLMSFTDataset(SFTDataset, VLMDatasetMixin):
@@ -291,23 +260,9 @@ def dynamic_collate_fn(batch, padding_value=0):
     }
     
     if pixel_values_list is not None:
-        # 安全检查：过滤 None 或 异常值
-        safe_pixel_values = []
-        for i, pv in enumerate(pixel_values_list):
-            if pv is None:
-                # 理论上 get_image 不会返回 None，但为了防御性编程
-                # print(f"[Warning] pixel_values at index {i} is None. Replacing with zeros.")
-                safe_pixel_values.append(torch.zeros((3, 224, 224), dtype=torch.float32))
-            elif torch.isnan(pv).any() or torch.isinf(pv).any():
-                print(f"[Warning] pixel_values at index {i} contains NaN/Inf. Replacing with zeros.")
-                safe_pixel_values.append(torch.zeros((3, 224, 224), dtype=torch.float32))
-            else:
-                # 强制转换为 float32 并确保内存连续
-                safe_pixel_values.append(pv.to(dtype=torch.float32).contiguous())
-
-        # Stack 变成 [Batch, 3, 224, 224]
-        pixel_values = torch.stack(safe_pixel_values)
-        # 增加 num_images 维度: [Batch, 1, 3, 224, 224] 以匹配 VisualVV.forward 的期望
+        # 优化：数据稳定后，直接 stack，无需逐一检查
+        pixel_values = torch.stack(pixel_values_list).to(torch.float32)
+        # 增加 num_images 维度: [Batch, 1, 3, 224, 224]
         if pixel_values.dim() == 4:
             pixel_values = pixel_values.unsqueeze(1)
         batch_dict["pixel_values"] = pixel_values

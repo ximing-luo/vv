@@ -258,7 +258,7 @@ def train(mode, is_vlm=False, num_train_epochs=1, eval_steps=500, save_steps=500
     trainer.num_train_epochs = num_train_epochs
     trainer.eval_steps = eval_steps
     trainer.save_steps = save_steps
-    # trainer.is_freeze_llm = is_freeze_llm
+    trainer.is_freeze_llm = is_freeze_llm
     trainer.train()
 
 if __name__ == "__main__":

@@ -15,7 +15,7 @@ class VisualVV(VV):
             print(f"[Model] 已冻结 LLM 参数，仅训练 Vision Projector")
         # Vision Projector (将视觉特征映射到文本维度)
         self.projector = VisionProjector(vision_hidden_dim=config.vision_hidden_dim, hidden_size=config.hidden_dim)
-        self.vision_encoder, self.processor = self.get_vision_model(config.vision_model_path)
+        self.vision_encoder = self.get_vision_model(config.vision_model_path)
         self.apply(self._init_weights)
 
     @staticmethod
@@ -23,16 +23,17 @@ class VisualVV(VV):
         from transformers import logging as hf_logging
         hf_logging.set_verbosity_error()
         if not os.path.exists(model_path):
-            return None, None
+            return None
         model = CLIPVisionModel.from_pretrained(model_path)
-        processor = CLIPImageProcessor.from_pretrained(model_path)
+        # processor = CLIPImageProcessor.from_pretrained(model_path)
         # 冻结 vision_encoder 的所有参数
         for param in model.parameters():
             param.requires_grad = False
-        return model.eval(), processor
+        return model.eval()
 
     @staticmethod
     def image2tensor(image, processor):
+        """将单张 PIL Image 预处理为 Tensor"""
         if image.mode != 'RGB': image = image.convert('RGB')
         inputs = processor(images=image, return_tensors="pt")['pixel_values']
         return inputs
@@ -106,36 +107,17 @@ class VisualVV(VV):
         处理视觉输入并将图像嵌入融合到文本隐藏状态中
         """
         if pixel_values is not None:
-            # 确保内存连续性，防止 CUDA Error
             pixel_values = pixel_values.contiguous()
-            
             if len(pixel_values.shape) == 6:
                 pixel_values = pixel_values.squeeze(2)
-            
-            # pixel_values shape: (bs, num_images, c, h, w)
             bs, num, c, im_h, im_w = pixel_values.shape
-            
-            # 将 batch 和 image 维度合并，一次性通过 vision_encoder，极大提高利用率
-            # (bs * num, c, im_h, im_w)
             flat_pixel_values = pixel_values.view(bs * num, c, im_h, im_w)
-            
-            try:
-                # 获取所有图片的 embedding
-                # shape: (bs * num, patches, vision_hidden_dim)
-                with torch.no_grad():
-                    outputs = self.vision_encoder(pixel_values=flat_pixel_values)
-                    # 去掉 CLS token (index 0)
-                    vision_tensors = outputs.last_hidden_state[:, 1:, :]
-                
-                # 恢复成 (bs, num, patches, vision_hidden_dim)
-                vision_tensors = vision_tensors.view(bs, num, vision_tensors.size(1), vision_tensors.size(2))
-                
-            except Exception as e:
-                print(f"[ERROR] Vision encoder forward failed: {e}")
-                raise e
-
+            with torch.no_grad():
+                # 获取所有图片的 embedding, 去掉 CLS token, shape: (bs * num, patches, vision_hidden_dim)
+                vision_tensors = self.vision_encoder(pixel_values=flat_pixel_values).last_hidden_state[:, 1:, :]
+            # 恢复 shape: (bs, num, patches, vision_hidden_dim)
+            vision_tensors = vision_tensors.view(bs, num, -1, vision_tensors.size(-1))
             hidden_states = self.inject_visual_embeddings(tokens=input_ids, hidden_states=hidden_states, vision_tensors=vision_tensors, seqlen=seq_length)
-
         return hidden_states
 
     def forward(self,
@@ -143,57 +125,6 @@ class VisualVV(VV):
                 labels: Optional[torch.Tensor] = None,
                 pixel_values: Optional[torch.FloatTensor] = None,
                 **kwargs): 
-        
-        # --- Debugging: Check input_ids for out-of-bounds values ---
-        if input_ids is not None:
-            # We use a non-blocking check first to avoid perf hit if possible, 
-            # but for debugging we force CPU sync.
-            try:
-                # Check max value on CPU to avoid device-side assert crashing the process without info
-                input_ids_cpu = input_ids.detach().cpu()
-                max_val = input_ids_cpu.max().item()
-                min_val = input_ids_cpu.min().item()
-                
-                # Double check embedding weight shape
-                if hasattr(self, 'token_embedding_table'):
-                    vocab_dim = self.token_embedding_table.weight.shape[0]
-                    if vocab_dim != self.config.vocab_size:
-                        print(f"\n[FATAL ERROR] Embedding size mismatch! Weight: {vocab_dim}, Config: {self.config.vocab_size}")
-                        raise ValueError(f"Embedding mismatch: {vocab_dim} vs {self.config.vocab_size}")
-                    if max_val >= vocab_dim:
-                         print(f"\n[FATAL ERROR] Input ID {max_val} >= Embedding size {vocab_dim}")
-                         bad_indices = (input_ids_cpu >= vocab_dim).nonzero(as_tuple=False)
-                         print(f"Bad indices (first 5): {bad_indices[:5]}")
-                         print(f"Bad values: {input_ids_cpu[bad_indices[:5][:, 0], bad_indices[:5][:, 1]]}")
-                         raise ValueError(f"Input ID out of bounds: {max_val} >= {vocab_dim}")
-
-                if max_val >= self.config.vocab_size:
-                    print(f"\n[FATAL ERROR] Found input_id {max_val} >= vocab_size {self.config.vocab_size}")
-                    # Find specific indices
-                    bad_indices = (input_ids_cpu >= self.config.vocab_size).nonzero(as_tuple=False)
-                    print(f"Bad indices (first 5): {bad_indices[:5]}")
-                    print(f"Bad values: {input_ids_cpu[bad_indices[:5][:, 0], bad_indices[:5][:, 1]]}")
-                    raise ValueError(f"Input ID out of bounds: {max_val} >= {self.config.vocab_size}")
-                
-                if min_val < 0:
-                    print(f"\n[FATAL ERROR] Found negative input_id {min_val}")
-                    raise ValueError(f"Input ID negative: {min_val}")
-
-                if labels is not None:
-                     labels_cpu = labels.detach().cpu()
-                     # Ignore -100
-                     mask = labels_cpu != -100
-                     if mask.any():
-                         max_label = labels_cpu[mask].max().item()
-                         if max_label >= self.config.vocab_size:
-                             print(f"\n[FATAL ERROR] Found label {max_label} >= vocab_size {self.config.vocab_size}")
-                             raise ValueError(f"Label out of bounds: {max_label}")
-                     
-            except Exception as e:
-                print(f"[Debug Check Failed] {e}")
-                raise e
-        # -----------------------------------------------------------
-
         batch_size, seq_length = input_ids.shape
         x = self.token_embedding_table(input_ids)
 
