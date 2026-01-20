@@ -1,16 +1,32 @@
 import json
 import os
 import random
+import shutil
+import tempfile
 from pathlib import Path
+from typing import List, Union
 from tokenizers import Tokenizer, models, trainers, pre_tokenizers, decoders
-from .tools.vocab_tool import export_readable_vocab
+from .tools.vocab_tool import export_readable_vocab, prepare_cache_files, analyze_vocab_distribution
 
-def get_training_files(input_path: str, max_gb: float = 1.0, sample_rate: float = 1.0):
+def get_training_files(input_paths: Union[str, List[str]], max_gb: float = 1.0, sample_rate: float = 1.0):
     """
     获取训练文件列表，并根据 max_gb 和 sample_rate 进行筛选
+    支持传入单个路径字符串或路径列表
     """
-    path = Path(input_path)
-    all_files = list(path.rglob("*.txt") if path.is_dir() else ([path] if path.suffix == ".txt" else []))
+    if isinstance(input_paths, str):
+        input_paths = [input_paths]
+    
+    all_files = []
+    extensions = {".txt", ".jsonl"}
+    
+    for path_str in input_paths:
+        path = Path(path_str)
+        if path.is_dir():
+            # 递归获取目录下所有匹配后缀的文件
+            for ext in extensions:
+                all_files.extend(list(path.rglob(f"*{ext}")))
+        elif path.suffix in extensions:
+            all_files.append(path)
     
     if not all_files:
         return []
@@ -41,13 +57,11 @@ def get_training_files(input_path: str, max_gb: float = 1.0, sample_rate: float 
     print(f"[Data] 最终选取 {len(selected_files)} 个文件，总计约 {total_bytes / 1024**3:.2f} GB")
     return selected_files
 
-def train_tokenizer(input_path: str, output_dir: str, vocab_size: int = 6400, max_gb: float = 1.0, sample_rate: float = 1.0):
+def train_tokenizer(input_paths: Union[str, List[str]], output_dir: str, vocab_size: int = 6400, max_gb: float = 1.0, sample_rate: float = 1.0):
     """
     训练 BPE 分词器并保存为 Hugging Face 格式
-    采用基于文件路径的训练方式：
-    利用 Rust 底层的 Memory Mapping 和多线程，绕过 Python 字符串对象开销，极大地减少内存占用。
     """
-    print(f"[Tokenizer] 正在从 {input_path} 训练 BPE 分词器...")
+    print(f"[Tokenizer] 正在从 {input_paths} 训练 BPE 分词器...")
     print(f"[Tokenizer] 限制数据量: {max_gb}GB, 采样率: {sample_rate}, 目标词表大小: {vocab_size}")
     
     tokenizer = Tokenizer(models.BPE(unk_token=None))
@@ -60,16 +74,50 @@ def train_tokenizer(input_path: str, output_dir: str, vocab_size: int = 6400, ma
         initial_alphabet=pre_tokenizers.ByteLevel.alphabet()
     )
     # 获取筛选后的文件列表
-    files = get_training_files(input_path, max_gb=max_gb, sample_rate=sample_rate)
-    # 执行训练：直接传文件路径给 Rust 引擎
-    tokenizer.train(files, trainer=trainer)
+    files = get_training_files(input_paths, max_gb=max_gb, sample_rate=sample_rate)
+    # 建立临时缓存目录，将预处理后的文本存入其中，让 Rust 引擎直接读取以获得最高性能
+    cache_dir = tempfile.mkdtemp(prefix="tokenizer_train_cache_")
+    try:
+        cache_files = prepare_cache_files(files, cache_dir)
+        tokenizer.train(cache_files, trainer=trainer)
+    finally:
+        shutil.rmtree(cache_dir, ignore_errors=True)
+        print(f"[Tokenizer] 已清理临时缓存: {cache_dir}")
     tokenizer.decoder = decoders.ByteLevel()
-
     os.makedirs(output_dir, exist_ok=True)
     tokenizer_path = os.path.join(output_dir, "tokenizer.json")
     tokenizer.save(tokenizer_path)
     # tokenizer.model.save(output_dir) # 保存 vocab.json 和 merges.txt
+    # 导出可读的词表文件，分析词表分布
     export_readable_vocab(tokenizer_path, os.path.join(output_dir, "vocab.txt"))
+    analyze_vocab_distribution(os.path.join(output_dir, "vocab.txt"))
+
+    added_tokens_decoder = {
+        "0": {
+            "content": "<|endoftext|>",
+            "lstrip": False,      # 是否去除左侧空白
+            "normalized": False,  # 是否进行标准化
+            "rstrip": False,      # 是否去除右侧空白
+            "single_word": False, # 是否仅作为单次匹配
+            "special": True       # 是否为特殊 token
+        },
+        "1": {
+            "content": "<|im_start|>",
+            "lstrip": False,
+            "normalized": False,
+            "rstrip": False,
+            "single_word": False,
+            "special": True
+        },
+        "2": {
+            "content": "<|im_end|>",
+            "lstrip": False,
+            "normalized": False,
+            "rstrip": False,
+            "single_word": False,
+            "special": True
+        }
+    }
 
     config = {
         # === 基础配置 (Basic Config) ===
@@ -100,32 +148,6 @@ def train_tokenizer(input_path: str, output_dir: str, vocab_size: int = 6400, ma
         # === 聊天模板 (Chat Template) ===
         "chat_template": "{%- if messages[0]['role'] == 'system' -%}\n    {{- '<|im_start|>系统\\n' + messages[0]['content'] + '<|im_end|>\\n' -}}\n{%- else -%}\n    {{- '<|im_start|>系统\\n你是一个有用的助手，由 Axon 开发。<|im_end|>\\n' -}}\n{%- endif -%}\n\n{%- for message in messages -%}\n    {%- if message['role'] == 'user' -%}\n        {{- '<|im_start|>用户\\n' + message['content'] + '<|im_end|>\\n' -}}\n    {%- elif message['role'] == 'assistant' -%}\n        {{- '<|im_start|>助手\\n' + message['content'] + '<|im_end|>\\n' -}}\n    {%- endif -%}\n{%- endfor -%}\n\n{%- if add_generation_prompt -%}\n    {{- '<|im_start|>助手\\n' -}}\n{%- endif -%}"
     }
-    added_tokens_decoder = {
-        "0": {
-            "content": "<|endoftext|>",
-            "lstrip": False,      # 是否去除左侧空白
-            "normalized": False,  # 是否进行标准化
-            "rstrip": False,      # 是否去除右侧空白
-            "single_word": False, # 是否仅作为单次匹配
-            "special": True       # 是否为特殊 token
-        },
-        "1": {
-            "content": "<|im_start|>",
-            "lstrip": False,
-            "normalized": False,
-            "rstrip": False,
-            "single_word": False,
-            "special": True
-        },
-        "2": {
-            "content": "<|im_end|>",
-            "lstrip": False,
-            "normalized": False,
-            "rstrip": False,
-            "single_word": False,
-            "special": True
-        }
-    }
     
     with open(os.path.join(output_dir, "tokenizer_config.json"), "w", encoding="utf-8") as f:
         json.dump(config, f, ensure_ascii=False, indent=4)
@@ -138,12 +160,12 @@ if __name__ == "__main__":
     TOKENIZER_DIR = r'D:\Axon\ANN\llm\vv\src\data\dataset\tokenizer'
     
     # 参数说明:
-    # max_gb: 限制参与训练的总数据量
     # sample_rate: 随机采样比例 (针对文件)
+    # max_gb: 采样文件后限制参与训练的总数据量
     train_tokenizer(
         DATA_DIR, 
         TOKENIZER_DIR, 
         vocab_size=6400, 
-        max_gb=0.3, 
-        sample_rate=0.05
+        sample_rate=0.05, 
+        max_gb=0.3
     )

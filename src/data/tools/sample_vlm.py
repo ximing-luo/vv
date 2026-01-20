@@ -169,14 +169,6 @@ class VLMSampler:
                         print(f"保存图像 {i} 失败: {e}")
                 
                 preview_data.append(sample_info)
-                
-                print(f"\n--- 样本 {i} ---")
-                print(f"图像名称: {sample_info['image_name']}")
-                # 打印前 100 个字符
-                conv_str = json.dumps(sample_info['conversations'], ensure_ascii=False)
-                print(f"对话内容(简略): {conv_str[:100]}...")
-                if "image_path" in sample_info:
-                    print(f"图像已保存至: {sample_info['image_path']}")
 
             # 保存摘要 JSON
             summary_path = os.path.join(output_dir, "preview_summary.json")
@@ -195,7 +187,7 @@ class VLMSampler:
         
         # 1. Pretrain 采样与预览
         pretrain_rel = os.path.join("gongjy", "minimind-v_dataset", "pretrain_data.parquet")
-        pretrain_out_sub = os.path.join("pretrain", "minimind-v")
+        pretrain_out_sub = os.path.join("vlm_pretrain", "minimind-v")
         pretrain_sample_path = self.sample_parquet(
             rel_path=pretrain_rel,
             output_sub_dir=pretrain_out_sub,
@@ -209,7 +201,7 @@ class VLMSampler:
 
         # 2. SFT 采样与预览
         sft_rel = os.path.join("gongjy", "minimind-v_dataset", "sft_data.parquet")
-        sft_out_sub = os.path.join("finetune", "minimind-v")
+        sft_out_sub = os.path.join("vlm_finetune", "minimind-v")
         sft_sample_path = self.sample_parquet(
             rel_path=sft_rel,
             output_sub_dir=sft_out_sub,

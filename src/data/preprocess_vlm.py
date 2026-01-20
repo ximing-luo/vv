@@ -254,7 +254,7 @@ def preprocess_vlm(num_workers=1):
     pipeline = VLMPreprocessPipeline(tokenizer, visual_config.max_seq_len, TOKENIZER_DIR, visual_config)
     
     # 1. 处理 VLM 预训练数据
-    vlm_pretrain_dir = os.path.join(METADATA_ROOT, "pretrain", "minimind-v")
+    vlm_pretrain_dir = os.path.join(METADATA_ROOT, "vlm_pretrain", "minimind-v")
     if os.path.exists(vlm_pretrain_dir):
         pipeline.save_sequences(
             pipeline.collect_sequences(vlm_pretrain_dir, mode='pretrain', num_workers=num_workers),
@@ -262,7 +262,7 @@ def preprocess_vlm(num_workers=1):
         )
 
     # 2. 处理 VLM SFT 数据
-    vlm_sft_dir = os.path.join(METADATA_ROOT, "finetune", "minimind-v")
+    vlm_sft_dir = os.path.join(METADATA_ROOT, "vlm_finetune", "minimind-v")
     if os.path.exists(vlm_sft_dir):
         pipeline.save_sequences(
             pipeline.collect_sequences(vlm_sft_dir, mode='finetune', num_workers=num_workers),

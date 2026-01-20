@@ -11,9 +11,9 @@ import numpy as np
 from tqdm import tqdm
 from transformers import AutoTokenizer
 # 将项目根目录添加到 sys.path 以支持本地模块导入
-project_root = str(Path(__file__).resolve().parents[2])
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
+root = str(Path(__file__).resolve().parents[2])
+if root not in sys.path:
+    sys.path.insert(0, root)
 from configs.model import VVConfig
 
 WORKER_PROCESSOR = None
@@ -314,8 +314,9 @@ def test_preprocess():
 
 def preprocess(num_workers = 16, pretrain_sample_ratio=1.0, finetune_sample_ratio=0.1, mixed_sample_ratio=0.1):
     # 配置
-    METADATA_ROOT = os.path.join(current_dir, 'metadata')
-    DATASET_ROOT = os.path.join(current_dir, 'dataset')
+    data_dir = os.path.join(root, 'src', 'data')
+    METADATA_ROOT = os.path.join(data_dir, 'metadata')
+    DATASET_ROOT = os.path.join(data_dir, 'dataset')
     TOKENIZER_DIR = os.path.join(DATASET_ROOT, 'tokenizer')
     pretrain_input_dir = os.path.join(METADATA_ROOT, "pretrain")
     pretrain_output_bin = os.path.join(DATASET_ROOT, "llm", "pretrain.bin")
