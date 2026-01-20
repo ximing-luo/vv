@@ -96,7 +96,7 @@ def run_test_suite(model, tokenizer, device, mode, input_data, output_file, test
     运行一组推理测试，测试不同的温度和 top_k 参数
     """
     for temp_val, tk_val, step, is_temp_fixed in test_configs:
-        for i in range(8):
+        for i in range(4):
             temp = temp_val if is_temp_fixed else temp_val + i * step
             top_k = tk_val + i * step if is_temp_fixed else tk_val
             _smart_print(f"\n温度: {temp:.2f}, top_k: {int(top_k)}", output_file)
@@ -105,10 +105,10 @@ def run_test_suite(model, tokenizer, device, mode, input_data, output_file, test
 
 def test():
     # 1. 获取模型根目录
-    checkpoints_root = os.path.join(vv_path, "models", "checkpoints")
+    checkpoints_root = os.path.join(root, "models", "checkpoints")
     test_configs = [
-        (1.3, 40, 5, True),  # 固定温度，变化 top_k
-        (0.8, 75, 0.1, False) # 固定 top_k，变化温度
+        (1.3, 65, 5, True),  # 固定温度，变化 top_k
+        (1.1, 75, 0.1, False) # 固定 top_k，变化温度
     ]
     messages = [{"role": "user", "content": "写一篇关于人工智能对未来发展的影响的文章。"}]
     prompt = (
@@ -125,16 +125,16 @@ def test():
     model, tokenizer, device = load_model(model_path)
     with open("inference_output.txt", "w", encoding="utf-8") as output_file:
         # # 2. 测试聊天模式
-        # print("\n=== 测试聊天模式 ===")
-        # run_test_suite(model, tokenizer, device, 'chat', messages, output_file, test_configs,
-        # max_new_tokens= 400
-        # )
+        print("\n=== 测试聊天模式 ===")
+        run_test_suite(model, tokenizer, device, 'chat', messages, output_file, test_configs,
+        max_new_tokens= 300
+        )
 
         # 3. 测试续写模式
-        # print("\n=== 测试续写模式 ===")
-        # run_test_suite(model, tokenizer, device, 'pretrain', prompt, output_file, test_configs,
-        # max_new_tokens= 2048
-        # )
+        print("\n=== 测试续写模式 ===")
+        run_test_suite(model, tokenizer, device, 'pretrain', prompt, output_file, test_configs,
+        max_new_tokens= 512
+        )
 
         # 4. vlm测试
         print("\n=== 图片理解测试 ===")

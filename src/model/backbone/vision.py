@@ -7,7 +7,9 @@ class VisionProjector(nn.Module):
         self.vision_hidden_dim = vision_hidden_dim
         self.hidden_size = hidden_size
         self.projector = nn.Sequential(
-            nn.Linear(self.vision_hidden_dim, self.hidden_size)
+            nn.Linear(self.vision_hidden_dim, self.hidden_size),
+            nn.GELU(),
+            nn.Linear(self.hidden_size, self.hidden_size)
         )
 
     def forward(self, x):

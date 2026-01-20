@@ -7,16 +7,15 @@ from .backbone.vision import VisionProjector
 from .model_llm import VV
 
 class VisualVV(VV):
-    def __init__(self, config=None, freeze_llm=True):
+    def __init__(self, config=None, freeze_llm=False):
         super().__init__(config)
         if freeze_llm:
             for param in self.parameters():
                 param.requires_grad = False
-            print(f"[Model] 已冻结 LLM 参数，仅训练 Vision Projector")
-        # Vision Projector (将视觉特征映射到文本维度)
+            print(f"[Model] 已冻结 LLM 参数")
         self.projector = VisionProjector(vision_hidden_dim=config.vision_hidden_dim, hidden_size=config.hidden_dim)
+        self.projector.apply(self._init_weights)
         self.vision_encoder = self.get_vision_model(config.vision_model_path)
-        self.apply(self._init_weights)
 
     @staticmethod
     def get_vision_model(model_path: str):
@@ -72,7 +71,14 @@ class VisualVV(VV):
             } or None
 
         image_indices = find_indices(tokens, self.config.image_ids)
-        if vision_tensors is not None and image_indices:
+        
+        if vision_tensors is not None:
+            if not image_indices:
+                # 只有在非 eval 模式下打印警告，避免推理时刷屏
+                if self.training:
+                    print(f"[Warning] 检测到图像输入但未在文本中找到占位符 (image_ids: {self.config.image_ids[0]} * {len(self.config.image_ids)})")
+                return hidden_states
+
             vision_proj = self.projector(vision_tensors)
             if len(vision_proj.shape) == 3:
                 vision_proj = vision_proj.unsqueeze(0)

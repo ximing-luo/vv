@@ -8,3 +8,4 @@ src/data/metadata
 tests
 log.md
 inference_output.txt
+pyrightconfig.json
