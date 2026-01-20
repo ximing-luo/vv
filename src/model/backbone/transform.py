@@ -1,7 +1,7 @@
 import torch.nn as nn
-from .backbone.attention import MultiHeadAttention, FlashAttention, GroupedQueryAttention, MultiHeadLatentAttention
-from .backbone.rms import RMSNorm
-from .backbone.moe import FeedForward, GatedMLP, MoE, SharedMoE, AuxiliaryLossMoE, DeepseekMoE
+from .attention import MultiHeadAttention, FlashAttention, GroupedQueryAttention, MultiHeadLatentAttention
+from .rms import RMSNorm
+from .moe import FeedForward, GatedMLP, MoE, SharedMoE, AuxiliaryLossMoE, DeepseekMoE
 
 class BaseBlock(nn.Module):
     def __init__(self, config):

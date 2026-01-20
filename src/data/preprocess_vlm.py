@@ -2,15 +2,11 @@ import io
 import json
 import os
 import random
-import re
 import struct
 import sys
-import itertools
 import multiprocessing as mp
 from pathlib import Path
 import numpy as np
-import pandas as pd
-import torch
 from PIL import Image
 from tqdm import tqdm
 from transformers import AutoTokenizer
@@ -270,7 +266,7 @@ def preprocess_vlm(num_workers=1):
     if os.path.exists(vlm_sft_dir):
         pipeline.save_sequences(
             pipeline.collect_sequences(vlm_sft_dir, mode='finetune', num_workers=num_workers),
-            os.path.join(DATASET_ROOT, "vlm", "sft.bin")
+            os.path.join(DATASET_ROOT, "vlm", "finetune.bin")
         )
 
 if __name__ == "__main__":

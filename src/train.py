@@ -208,12 +208,12 @@ class ModelTrainer:
             if self.mode == 'pretrain':
                 # 场景 1 & 2: LLM 预训练
                 self.output_dir = LLM_PRETRAIN_DIR
-                self.train_bin = os.path.join(self.dataset_root, 'pretrain', 'pretrain_data.bin')
+                self.train_bin = os.path.join(self.dataset_root, 'llm', 'pretrain.bin')
                 self.init_weights_path = None # LLM 预训练从头开始或从最新 checkpoint 恢复
             else:
                 # 场景 3 & 4: LLM 微调
                 self.output_dir = LLM_FINETUNE_DIR
-                self.train_bin = os.path.join(self.dataset_root, 'finetune', 'finetune_data.bin')
+                self.train_bin = os.path.join(self.dataset_root, 'llm', 'finetune.bin')
                 # 初始权重从 LLM 预训练的最新检查点取
                 self.init_weights_path = self._get_latest_checkpoint(LLM_PRETRAIN_DIR)
         else:
@@ -227,7 +227,7 @@ class ModelTrainer:
             else:
                 # 场景 7 & 8: VLM 微调
                 self.output_dir = VLM_FINETUNE_DIR
-                self.train_bin = os.path.join(self.dataset_root, 'vlm', 'sft.bin')
+                self.train_bin = os.path.join(self.dataset_root, 'vlm', 'finetune.bin')
                 # 初始权重从 VLM 预训练的最新检查点取
                 self.init_weights_path = self._get_latest_checkpoint(VLM_PRETRAIN_DIR)
                 self.is_freeze_llm = False
@@ -259,4 +259,4 @@ def train(mode, is_vlm=False, num_train_epochs=1, eval_steps=500, save_steps=500
 if __name__ == "__main__":
     mode = 'pretrain' # pretrain or finetune
     is_vlm = True # 是否是训练vlm
-    train(mode=mode, is_vlm=is_vlm, num_train_epochs=1, eval_steps=500, save_steps=500)
+    train(mode=mode, is_vlm=is_vlm, num_train_epochs=1.5, eval_steps=500, save_steps=500)
