@@ -120,7 +120,7 @@ class ModelTrainer:
         training_args = TrainingArguments(
             # 1. 输出与日志路径
             output_dir=self.output_dir, # 输出目录，用于存放 Checkpoints
-            logging_dir=os.path.join(self.root_path, 'models', 'logs'), # TensorBoard 日志目录
+            logging_dir=os.path.join(self.root_path, 'logs'), # TensorBoard 日志目录
             report_to="none", # 报告目标（如 wandb），这里关闭
             # 2. 训练超参数 (Hyperparameters)
             learning_rate=self.learning_rate, # 初始学习率
@@ -208,26 +208,26 @@ class ModelTrainer:
             if self.mode == 'pretrain':
                 # 场景 1 & 2: LLM 预训练
                 self.output_dir = LLM_PRETRAIN_DIR
-                self.train_bin = os.path.join(self.dataset_root, 'llm', 'pretrain.bin')
+                self.train_bin = os.path.join(self.dataset_root, 'data_llm', 'pretrain.bin')
                 self.init_weights_path = None # LLM 预训练从头开始或从最新 checkpoint 恢复
             else:
                 # 场景 3 & 4: LLM 微调
                 self.output_dir = LLM_FINETUNE_DIR
-                self.train_bin = os.path.join(self.dataset_root, 'llm', 'finetune.bin')
+                self.train_bin = os.path.join(self.dataset_root, 'data_llm', 'finetune.bin')
                 # 初始权重从 LLM 预训练的最新检查点取
                 self.init_weights_path = self._get_latest_checkpoint(LLM_PRETRAIN_DIR)
         else:
             if self.mode == 'pretrain':
                 # 场景 5 & 6: VLM 预训练
                 self.output_dir = VLM_PRETRAIN_DIR
-                self.train_bin = os.path.join(self.dataset_root, 'vlm', 'pretrain.bin')
+                self.train_bin = os.path.join(self.dataset_root, 'data_vlm', 'pretrain.bin')
                 # 初始权重从 LLM 微调的最新检查点取
                 self.init_weights_path = self._get_latest_checkpoint(LLM_FINETUNE_DIR)
                 self.is_freeze_llm = True
             else:
                 # 场景 7 & 8: VLM 微调
                 self.output_dir = VLM_FINETUNE_DIR
-                self.train_bin = os.path.join(self.dataset_root, 'vlm', 'finetune.bin')
+                self.train_bin = os.path.join(self.dataset_root, 'data_vlm', 'finetune.bin')
                 # 初始权重从 VLM 预训练的最新检查点取
                 self.init_weights_path = self._get_latest_checkpoint(VLM_PRETRAIN_DIR)
                 self.is_freeze_llm = False

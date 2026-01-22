@@ -258,7 +258,7 @@ def preprocess_vlm(num_workers=1):
     if os.path.exists(vlm_pretrain_dir):
         pipeline.save_sequences(
             pipeline.collect_sequences(vlm_pretrain_dir, mode='pretrain', num_workers=num_workers),
-            os.path.join(DATASET_ROOT, "vlm", "pretrain.bin")
+            os.path.join(DATASET_ROOT, "data_vlm", "pretrain.bin")
         )
 
     # 2. 处理 VLM SFT 数据
@@ -266,7 +266,7 @@ def preprocess_vlm(num_workers=1):
     if os.path.exists(vlm_sft_dir):
         pipeline.save_sequences(
             pipeline.collect_sequences(vlm_sft_dir, mode='finetune', num_workers=num_workers),
-            os.path.join(DATASET_ROOT, "vlm", "finetune.bin")
+            os.path.join(DATASET_ROOT, "data_vlm", "finetune.bin")
         )
 
 if __name__ == "__main__":

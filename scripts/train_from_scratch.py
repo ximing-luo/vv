@@ -24,11 +24,11 @@ def delete_data(paths_to_delete):
 
 data_path = root_path / 'src' / 'data'
 paths_to_delete = [
-    os.path.join(root_path, 'models', 'logs'),
+    os.path.join(root_path, 'logs'),
     os.path.join(root_path, 'models', 'checkpoints'),
     os.path.join(root_path, 'models', 'vv'),
-    os.path.join(data_path, 'dataset', 'vlm'),
-    os.path.join(data_path, 'dataset', 'llm'),
+    os.path.join(data_path, 'dataset', 'data_vlm'),
+    os.path.join(data_path, 'dataset', 'data_llm'),
     os.path.join(data_path, 'metadata')
 ]
 
@@ -78,17 +78,17 @@ def train_from_scratch():
 
 
 if __name__ == "__main__":
-    # delete_data(paths_to_delete) # 如果需要清空数据，取消此行注释
-    # sample()
-    # train_token()
-    # preprocess(num_workers=4,
-    #     pretrain_sample_ratio=1,
-    #     mixed_sample_ratio=0.1,
-    #     finetune_sample_ratio=1
-    #     )
-    # preprocess_vlm(num_workers=4)
+    delete_data(paths_to_delete) # 如果需要清空数据，取消此行注释
+    sample()
+    train_token()
+    preprocess(num_workers=4,
+        pretrain_sample_ratio=1,
+        mixed_sample_ratio=0.1,
+        finetune_sample_ratio=1
+        )
+    preprocess_vlm(num_workers=4)
 
-    # train(mode='pretrain', is_vlm=False, num_train_epochs=1, eval_steps=500, save_steps=500)
-    # train(mode='finetune', is_vlm=False, num_train_epochs=1, eval_steps=500, save_steps=500)
+    train(mode='pretrain', is_vlm=False, num_train_epochs=1, eval_steps=250, save_steps=500)
+    train(mode='finetune', is_vlm=False, num_train_epochs=1, eval_steps=500, save_steps=500)
     train(mode='pretrain', is_vlm=True, num_train_epochs=1, eval_steps=250, save_steps=250)
     train(mode='finetune', is_vlm=True, num_train_epochs=1, eval_steps=250, save_steps=250)

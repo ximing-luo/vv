@@ -319,9 +319,9 @@ def preprocess(num_workers = 16, pretrain_sample_ratio=1.0, finetune_sample_rati
     DATASET_ROOT = os.path.join(data_dir, 'dataset')
     TOKENIZER_DIR = os.path.join(DATASET_ROOT, 'tokenizer')
     pretrain_input_dir = os.path.join(METADATA_ROOT, "pretrain")
-    pretrain_output_bin = os.path.join(DATASET_ROOT, "llm", "pretrain.bin")
+    pretrain_output_bin = os.path.join(DATASET_ROOT, "data_llm", "pretrain.bin")
     finetune_input_dir = os.path.join(METADATA_ROOT, "finetune")
-    finetune_output_bin = os.path.join(DATASET_ROOT, "llm", "finetune.bin")
+    finetune_output_bin = os.path.join(DATASET_ROOT, "data_llm", "finetune.bin")
     max_seq_len = VVConfig.max_seq_len
     effective_max_len = int(VVConfig.max_seq_len * VVConfig.rope_ntk_alpha)
     print(f"[Preprocess] Config max_seq_len: {VVConfig.max_seq_len}, Alpha: {VVConfig.rope_ntk_alpha}")
