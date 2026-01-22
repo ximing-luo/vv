@@ -9,11 +9,16 @@
 - dynamic_collate_fn ：将这组 Token 转化为 Tensor，并用 0 (Input) 和 -100 (Label) 进行 Padding。
 - Model Forward ：模型接收到形状为 [Batch, Seq_Len] 的 Tensor 开始计算
 """
+import io
+import struct
+import numpy as np
 import torch
 import torch.nn.utils.rnn as rnn_utils
-import numpy as np
+from PIL import Image
 from torch.utils.data import Dataset, Sampler
-import struct
+from transformers import CLIPImageProcessor
+from configs.model import VisualVVConfig
+from src.model import VisualVV
 
 class PretrainDataset(Dataset):
     """
@@ -120,6 +125,72 @@ class SFTDataset(PretrainDataset):
         
         return X, Y
 
+class VLMDatasetMixin:
+    """VLM 数据加载混入类：通过内存映射高效加载图像"""
+    def init_vlm_data(self, data_path, vision_model_path):
+        # 1. 加载 seq -> img_idx 映射
+        with open(data_path + ".img.idx", 'rb') as f:
+            f.seek(8) # 跳过 8 字节 header
+            self.seq_to_img_idx = np.frombuffer(f.read(), dtype=np.int32)
+
+        # 2. 加载图像长度并计算偏移量
+        with open(data_path + ".img.len", 'rb') as f:
+            self.num_images = struct.unpack('<Q', f.read(8))[0]
+            self.img_lengths = np.frombuffer(f.read(), dtype=np.uint32)
+        
+        self.img_offsets = np.zeros(len(self.img_lengths) + 1, dtype=np.uint64)
+        self.img_offsets[1:] = np.cumsum(self.img_lengths)
+
+        # 3. 内存映射图像数据并初始化处理器
+        self.img_data = np.memmap(data_path + ".img", mode='r')
+        self.processor = CLIPImageProcessor.from_pretrained(vision_model_path)
+        print(f"[VLMDataset] 已加载 {self.num_images} 张图片")
+
+    def get_image(self, seq_idx):
+        """根据序列索引安全地获取预处理后的图像 Tensor"""
+        # 检查 seq_idx 有效性，并用 walrus 操作符获取 img_idx
+        if seq_idx >= len(self.seq_to_img_idx) or (img_idx := self.seq_to_img_idx[seq_idx]) == -1:
+            # 若无对应图片，返回全黑图占位 (维度需与 CLIP 输入一致)
+            return torch.zeros((3, 224, 224), dtype=torch.float32)
+            
+        # 根据索引获取图像字节流，并在线解码
+        try:
+            offset = self.img_offsets[img_idx]
+            length = self.img_lengths[img_idx]
+            img_bytes = self.img_data[offset : offset + length]
+            image = Image.open(io.BytesIO(img_bytes))
+            # 注意: VisualVV 应在文件顶部导入以提高性能
+            pixel_values = VisualVV.image2tensor(image, self.processor).squeeze(0)
+            return pixel_values
+        except Exception as e:
+            print(f"[Error] 图像解码失败 (seq_idx {seq_idx}, img_idx {img_idx}): {e}")
+            # 返回占位符防止因单张图片损坏而导致训练崩溃
+            return torch.zeros((3, 224, 224))
+
+class VLMPretrainDataset(PretrainDataset, VLMDatasetMixin):
+    def __init__(self, data_path, vision_model_path):
+        super().__init__(data_path)
+        self.init_vlm_data(data_path, vision_model_path)
+        self.image_token_id = VisualVVConfig().image_ids[0]
+
+    def __getitem__(self, idx):
+        X, Y = super().__getitem__(idx)
+        pixel_values = self.get_image(idx)
+        if self.image_token_id is not None:
+            Y = Y.clone()
+            Y[Y == self.image_token_id] = -100
+        return X, Y, pixel_values
+
+class VLMSFTDataset(SFTDataset, VLMDatasetMixin):
+    def __init__(self, data_path, tokenizer, vision_model_path, max_length=512):
+        super().__init__(data_path, tokenizer, max_length)
+        self.init_vlm_data(data_path, vision_model_path)
+
+    def __getitem__(self, idx):
+        X, Y = super().__getitem__(idx)
+        pixel_values = self.get_image(idx)
+        return X, Y, pixel_values
+
 class TokenBucketSampler(Sampler):
     """
     基于 Token 数量的 Batch Sampler。
@@ -165,20 +236,35 @@ class TokenBucketSampler(Sampler):
 
 def dynamic_collate_fn(batch, padding_value=0):
     """
-    动态整理函数：处理 Dataset 返回的 (X, Y) 元组列表。
+    动态整理函数：处理 Dataset 返回的 (X, Y) 或 (X, Y, pixel_values) 元组列表。
     优化后使用 pad_sequence 进行高效填充。
     """
-    # batch 是一个列表: [(X1, Y1), (X2, Y2), ...]
+    # batch 是一个列表: [(X1, Y1), (X2, Y2), ...] 或 [(X1, Y1, P1), (X2, Y2, P2), ...]
     # 分离 X 和 Y
     X_list = [item[0] for item in batch]
     Y_list = [item[1] for item in batch]
     
+    # 检查是否包含 pixel_values
+    pixel_values_list = None
+    if len(batch[0]) > 2:
+        pixel_values_list = [item[2] for item in batch]
+
     # 使用 pad_sequence 自动处理填充
     # batch_first=True 使得输出形状为 [batch_size, max_len]
     input_ids = rnn_utils.pad_sequence(X_list, batch_first=True, padding_value=padding_value)
     labels = rnn_utils.pad_sequence(Y_list, batch_first=True, padding_value=-100)
     
-    return {
+    batch_dict = {
         "input_ids": input_ids,
         "labels": labels
     }
+    
+    if pixel_values_list is not None:
+        # 优化：数据稳定后，直接 stack，无需逐一检查
+        pixel_values = torch.stack(pixel_values_list).to(torch.float32)
+        # 增加 num_images 维度: [Batch, 1, 3, 224, 224]
+        if pixel_values.dim() == 4:
+            pixel_values = pixel_values.unsqueeze(1)
+        batch_dict["pixel_values"] = pixel_values
+
+    return batch_dict

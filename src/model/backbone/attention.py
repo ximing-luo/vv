@@ -1,9 +1,9 @@
+import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import math
-from .rope import NTKAwareRotaryEmbedding, apply_rotary_pos_emb
-from .rms import RMSNorm
+from src.model.backbone.rope import NTKAwareRotaryEmbedding, apply_rotary_pos_emb
+from src.model.backbone.rms import RMSNorm
 
 class SingleHeadAttention(nn.Module):
     # 单头注意力机制

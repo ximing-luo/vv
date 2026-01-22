@@ -1,6 +1,6 @@
 import torch
 from transformers import Trainer, EarlyStoppingCallback
-from data.dataset import TokenBucketSampler, dynamic_collate_fn
+from src.data.dataset import TokenBucketSampler, dynamic_collate_fn
 from .tools.system import SystemControlCallback
 from .tools.log import CustomTensorBoardCallback
 from .tools.checkpoint import CheckpointCallback
@@ -42,6 +42,14 @@ test_cases = [
         'max_new_tokens': 50,
         'temperature': 1.3,
         'top_k': 75 
+    },
+    {
+        'prompt': ("请描述这张图片。<image>"),
+        'mode': 'vlm',
+        'max_new_tokens': 50,
+        'temperature': 1.3,
+        'top_k': 75,
+        'image_path': r'D:\Axon\ANN\llm\vv\src\data\database\gongjy\minimind-v_dataset\eval_images\彩虹瀑布-Rainbow-Falls .jpg'
     }
 ]
 
@@ -85,12 +93,13 @@ class DynamicTrainer(Trainer):
         # max_tokens = max_seq_len * batch_size * rope_ntk_alpha
         max_tokens = self.model.config.max_seq_len * self.args.per_device_train_batch_size * self.model.config.rope_ntk_alpha
         sampler = TokenBucketSampler(self.train_dataset, max_tokens=max_tokens)
-        # 使用 lambda 包装 collate_fn，传递 tokenizer 的 pad_token_id
+        # 使用 DataCollatorWrapper 替代 lambda 以支持 Windows 多进程 pickling
         pad_id = self.processing_class.pad_token_id if self.processing_class else 0
         return torch.utils.data.DataLoader(
             self.train_dataset, batch_sampler=sampler,
-            collate_fn=lambda b: dynamic_collate_fn(b, padding_value=pad_id),
-            pin_memory=True
+            collate_fn=DataCollatorWrapper(padding_value=pad_id),
+            num_workers=self.args.dataloader_num_workers,
+            pin_memory=self.args.dataloader_pin_memory
         )
 
     def get_eval_dataloader(self, eval_dataset=None):
@@ -99,8 +108,25 @@ class DynamicTrainer(Trainer):
         max_tokens = self.model.config.max_seq_len * self.args.per_device_eval_batch_size * self.model.config.rope_ntk_alpha
         sampler = TokenBucketSampler(eval_dataset, max_tokens=max_tokens)
         pad_id = self.processing_class.pad_token_id if self.processing_class else 0
+        
+        # Windows 优化：评估阶段通常数据量较小 (如 500 条)，
+        # 使用多进程加载 (num_workers > 0) 在 Windows 上极易触发 Pipe 序列化错误 (OSError [Errno 22])。
+        # 强制设置 num_workers=0 以确保稳定性，且对小规模评估性能影响忽略不计。
         return torch.utils.data.DataLoader(
             eval_dataset, batch_sampler=sampler,
-            collate_fn=lambda b: dynamic_collate_fn(b, padding_value=pad_id),
-            pin_memory=True
+            collate_fn=DataCollatorWrapper(padding_value=pad_id),
+            num_workers=0, 
+            pin_memory=self.args.dataloader_pin_memory
         )
+
+class DataCollatorWrapper:
+    """
+    包装 dynamic_collate_fn 以支持多进程序列化 (Pickling)。
+    Windows 下使用 spawn 模式启动多进程时，lambda 函数无法被序列化，
+    因此需要使用顶级类或函数。
+    """
+    def __init__(self, padding_value):
+        self.padding_value = padding_value
+    
+    def __call__(self, batch):
+        return dynamic_collate_fn(batch, padding_value=self.padding_value)

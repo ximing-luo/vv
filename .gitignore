@@ -1,10 +1,11 @@
 __pycache__/
 .conda
+logs
 models
-src/data/dataset/*
-!src/data/dataset/tokenizer
+src/data/dataset
 src/data/database
 src/data/metadata
 tests
 log.md
 inference_output.txt
+pyrightconfig.json

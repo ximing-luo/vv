@@ -1,13 +1,8 @@
-# 注意：PyTorch 建议根据具体的 CUDA 版本单独安装，这里仅列出版本要求
 torch>=2.6.0
-# Hugging Face 生态 (Hugging Face Ecosystem)
-transformers>=4.37.0      # 提供模型架构和训练工具
-datasets>=2.16.0          # 用于高效加载和处理数据集
-accelerate>=0.26.0        # 分布式训练和混合精度加速
-tokenizers>=0.15.0        # 快速分词器
-safetensors>=0.4.0        # 安全且快速的模型保存格式
-# 数据处理与科学计算 (Data Processing & Science)
-numpy>=1.26.0             # 基础数值计算
-tqdm>=4.66.0              # 进度条显示
-# 监控与日志 (Logging & Monitoring)
-tensorboard>=2.15.0       # 训练过程可视化
+transformers>=4.57.0      # 提供模型架构和训练工具
+datasets>=4.4.0           # 用于高效加载和处理数据集
+accelerate>=1.12.0        # 分布式训练和混合精度加速
+tokenizers>=0.22.0        # 快速分词器
+numpy>=2.2.0              # 基础数值计算
+tqdm>=4.67.0              # 进度条显示
+tensorboard>=2.20.0       # 训练过程可视化

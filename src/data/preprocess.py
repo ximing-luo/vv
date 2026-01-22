@@ -1,24 +1,20 @@
-import os
 import json
-import numpy as np
+import os
 import random
 import re
-from tqdm import tqdm
-import sys
 import struct
+import sys
 import itertools
 import multiprocessing as mp
-
-# 将项目根目录添加到 sys.path
-current_dir = os.path.dirname(os.path.abspath(__file__))
-src_dir = os.path.dirname(current_dir)
-project_root = os.path.dirname(src_dir)
-if project_root not in sys.path:
-    sys.path.append(project_root)
-if src_dir not in sys.path:
-    sys.path.append(src_dir)
-from configs.model import VVConfig
+from pathlib import Path
+import numpy as np
+from tqdm import tqdm
 from transformers import AutoTokenizer
+# 将项目根目录添加到 sys.path 以支持本地模块导入
+root = str(Path(__file__).resolve().parents[2])
+if root not in sys.path:
+    sys.path.insert(0, root)
+from configs.model import VVConfig
 
 WORKER_PROCESSOR = None
 
@@ -318,13 +314,14 @@ def test_preprocess():
 
 def preprocess(num_workers = 16, pretrain_sample_ratio=1.0, finetune_sample_ratio=0.1, mixed_sample_ratio=0.1):
     # 配置
-    METADATA_ROOT = os.path.join(current_dir, 'metadata')
-    DATASET_ROOT = os.path.join(current_dir, 'dataset')
+    data_dir = os.path.join(root, 'src', 'data')
+    METADATA_ROOT = os.path.join(data_dir, 'metadata')
+    DATASET_ROOT = os.path.join(data_dir, 'dataset')
     TOKENIZER_DIR = os.path.join(DATASET_ROOT, 'tokenizer')
     pretrain_input_dir = os.path.join(METADATA_ROOT, "pretrain")
-    pretrain_output_bin = os.path.join(DATASET_ROOT, "pretrain", "pretrain_data.bin")
+    pretrain_output_bin = os.path.join(DATASET_ROOT, "data_llm", "pretrain.bin")
     finetune_input_dir = os.path.join(METADATA_ROOT, "finetune")
-    finetune_output_bin = os.path.join(DATASET_ROOT, "finetune", "finetune_data.bin")
+    finetune_output_bin = os.path.join(DATASET_ROOT, "data_llm", "finetune.bin")
     max_seq_len = VVConfig.max_seq_len
     effective_max_len = int(VVConfig.max_seq_len * VVConfig.rope_ntk_alpha)
     print(f"[Preprocess] Config max_seq_len: {VVConfig.max_seq_len}, Alpha: {VVConfig.rope_ntk_alpha}")

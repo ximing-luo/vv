@@ -38,8 +38,8 @@ class VV(nn.Module):
         loss = None
         if labels is not None:
             batch, seq_len, vocab_size = logits.size()
-            logits = logits.view(batch * seq_len, vocab_size)
-            targets = labels.view(batch * seq_len)
+            logits = logits.reshape(batch * seq_len, vocab_size)
+            targets = labels.reshape(batch * seq_len)
             loss = F.cross_entropy(logits, targets, ignore_index=-100)
 
         return (loss, logits)
