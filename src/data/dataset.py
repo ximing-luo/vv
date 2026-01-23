@@ -27,6 +27,7 @@ class PretrainDataset(Dataset):
     """
     def __init__(self, data_path):
         idx_path = data_path + ".idx"
+        self.data_path = data_path  # 保存路径，子进程重新加载时使用
         # 1. 加载索引信息
         with open(idx_path, 'rb') as f:
             # 读取头部 8 字节: 总序列数 (uint64)
@@ -49,6 +50,19 @@ class PretrainDataset(Dataset):
         print(f" - 总序列数: {self.num_samples / 10000:.2f} 万")
         print(f" - 总 Token 数: {total_tokens / 1e9:.2f} B")
         print(f" - 平均序列长度: {total_tokens / self.num_samples:.2f}")
+
+    def __getstate__(self):
+        """序列化时排除不可靠的 memmap 对象"""
+        state = self.__dict__.copy()
+        if 'data' in state:
+            del state['data']
+        return state
+
+    def __setstate__(self, state):
+        """反序列化时重新创建 memmap 对象"""
+        self.__dict__.update(state)
+        # 重新映射文件
+        self.data = np.memmap(self.data_path, dtype=np.uint16, mode='r', offset=0)
 
     def __len__(self):
         return self.num_samples
@@ -128,6 +142,8 @@ class SFTDataset(PretrainDataset):
 class VLMDatasetMixin:
     """VLM 数据加载混入类：通过内存映射高效加载图像"""
     def init_vlm_data(self, data_path, vision_model_path):
+        self.vlm_data_path = data_path # 保存路径供序列化使用
+        self.vision_model_path = vision_model_path
         # 1. 加载 seq -> img_idx 映射
         with open(data_path + ".img.idx", 'rb') as f:
             f.seek(8) # 跳过 8 字节 header
@@ -145,6 +161,19 @@ class VLMDatasetMixin:
         self.img_data = np.memmap(data_path + ".img", mode='r')
         self.processor = CLIPImageProcessor.from_pretrained(vision_model_path)
         print(f"[VLMDataset] 已加载 {self.num_images} 张图片")
+
+    def __getstate__(self):
+        """处理 Mixin 的序列化状态"""
+        state = self.__dict__.copy()
+        if 'img_data' in state:
+            del state['img_data']
+        return state
+
+    def __setstate__(self, state):
+        """处理 Mixin 的反序列化状态"""
+        self.__dict__.update(state)
+        # 重新映射图像文件
+        self.img_data = np.memmap(self.vlm_data_path + ".img", mode='r')
 
     def get_image(self, seq_idx):
         """根据序列索引安全地获取预处理后的图像 Tensor"""

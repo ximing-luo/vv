@@ -76,7 +76,7 @@ class ModelTrainer:
         )
         # 如果是预训练模式 (pretrain)，强制重置 rope_ntk_alpha = 1.0
         if self.mode == 'pretrain': self.config.rope_ntk_alpha = 1.0
-        self.model = VisualVV(self.config, freeze_llm=self.is_freeze_llm)
+        self.model = VisualVV(self.config, freeze_llm=self.is_freeze_llm, is_load_vision_encoder=self.is_vlm)
         # 加载权重逻辑：如果有初始化权重路径，尝试加载
         if self.init_weights_path:
             print(f"正在从 {self.init_weights_path} 加载模型权重...")
@@ -161,7 +161,12 @@ class ModelTrainer:
             max_grad_norm=10.0, # 梯度裁剪，防止梯度爆炸
             disable_tqdm=False, # 强制开启进度条
         )
-        trainer = DynamicTrainer(model=self.model, args=training_args, train_dataset=self.train_dataset, eval_dataset=self.val_dataset, tokenizer=self.tokenizer)
+        trainer = DynamicTrainer(model=self.model,
+            args=training_args,
+            train_dataset=self.train_dataset,
+            eval_dataset=self.val_dataset,
+            tokenizer=self.tokenizer
+            )
         print(f"[System] 开始 {self.mode} 模式训练...")
         trainer.train(resume_from_checkpoint=self.resume_from_checkpoint)
         trainer.save_model(self.model_save_path)

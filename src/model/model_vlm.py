@@ -7,7 +7,7 @@ from .backbone.vision import VisionProjector
 from .model_llm import VV
 
 class VisualVV(VV):
-    def __init__(self, config=None, freeze_llm=False):
+    def __init__(self, config=None, freeze_llm=False, is_load_vision_encoder=True):
         super().__init__(config)
         if freeze_llm:
             for param in self.parameters():
@@ -15,7 +15,7 @@ class VisualVV(VV):
             print(f"[Model] 已冻结 LLM 参数")
         self.projector = VisionProjector(vision_hidden_dim=config.vision_hidden_dim, hidden_size=config.hidden_dim)
         self.projector.apply(self._init_weights)
-        self.vision_encoder = self.get_vision_model(config.vision_model_path)
+        self.vision_encoder = self.get_vision_model(config.vision_model_path) if is_load_vision_encoder else None
 
     @staticmethod
     def get_vision_model(model_path: str):
@@ -147,5 +147,11 @@ class VisualVV(VV):
             targets = labels.reshape(-1)
             loss = F.cross_entropy(logits, targets, ignore_index=-100)
         return (loss, logits)
+
+    def state_dict(self, *args, **kwargs):
+        sd = super().state_dict(*args, **kwargs)
+        # 过滤掉所有以 vision_encoder 开头的权重
+        sd = {k: v for k, v in sd.items() if not k.startswith('vision_encoder.')}
+        return sd
 
 

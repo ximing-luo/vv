@@ -44,7 +44,7 @@ class CustomTensorBoardCallback(TrainerCallback):
         if "loss" in logs and args.gradient_accumulation_steps > 1:
             logs["loss"] = logs["loss"] / args.gradient_accumulation_steps
         # 3. 记录标量 (Loss, LR 等)
-        ignore_keys = {"train_runtime", "train_samples_per_second", "train_steps_per_second", "total_flos", "train_loss"}
+        ignore_keys = {"train_runtime", "train_samples_per_second", "train_steps_per_second", "train_loss"}
         for k, v in logs.items():
             if k in ignore_keys:continue
             if not k.startswith("eval_") and isinstance(v, (int, float)):
