@@ -1,5 +1,6 @@
 __pycache__/
 .conda
+.trae
 logs
 models
 src/data/dataset

@@ -51,12 +51,12 @@
 
 > 后面看情况，我可能会出一个在服务器上复现的教程，直接选用 `pytorch >= 2.6.0` 的镜像，复现起来基本没有什么依赖冲突。
 
-如果你是想要学习，强烈建议先看看以下优秀项目：
+如果你对手写模型训练代码感兴趣，强烈建议看看以下优秀项目：
 - [LLMs-Zero-to-Hero](https://github.com/bbruceyuan/LLMs-Zero-to-Hero)
 - [Minimind](https://github.com/jingyaogong/minimind)
 - [My_LLM](https://github.com/REXWindW/my_llm)
 
-看完后，直接自己试着从 0 到 VLM 演进一遍，本项目更多的是自己研究，不适合复现
+本项目还在更新阶段，欢迎大家一起研究。
 
 ## 数据集下载
 
@@ -87,7 +87,7 @@ data
 
 ### 下载指引
 
-建议直接下载 **Minimind** 的数据集，数据量适中，好找：
+建议直接下载 **Minimind** 的数据集，数据量适中：
 [Minimind Dataset Files](https://www.modelscope.cn/datasets/gongjy/minimind_dataset/files)
 
 您可以使用 `modelscope` SDK 轻松下载：

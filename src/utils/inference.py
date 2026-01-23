@@ -96,7 +96,7 @@ def run_test_suite(model, tokenizer, device, mode, input_data, output_file, test
     运行一组推理测试，测试不同的温度和 top_k 参数
     """
     for temp_val, tk_val, step, is_temp_fixed in test_configs:
-        for i in range(4):
+        for i in range(1):
             temp = temp_val if is_temp_fixed else temp_val + i * step
             top_k = tk_val + i * step if is_temp_fixed else tk_val
             _smart_print(f"\n温度: {temp:.2f}, top_k: {int(top_k)}", output_file)
@@ -107,8 +107,8 @@ def test():
     # 1. 获取模型根目录
     checkpoints_root = os.path.join(root, "models", "checkpoints")
     test_configs = [
-        (1.3, 65, 5, True),  # 固定温度，变化 top_k
-        (1.1, 75, 0.1, False) # 固定 top_k，变化温度
+        (1.3, 75, 5, True),  # 固定温度，变化 top_k
+        (1.3, 75, 0.1, False) # 固定 top_k，变化温度
     ]
     messages = [{"role": "user", "content": "写一篇关于人工智能对未来发展的影响的文章。"}]
     prompt = (

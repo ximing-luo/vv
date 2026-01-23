@@ -76,7 +76,7 @@ class ModelTrainer:
         )
         # 如果是预训练模式 (pretrain)，强制重置 rope_ntk_alpha = 1.0
         if self.mode == 'pretrain': self.config.rope_ntk_alpha = 1.0
-        self.model = VisualVV(self.config, freeze_llm=self.is_freeze_llm) if self.is_vlm else VV(self.config) # 初始化模型
+        self.model = VisualVV(self.config, freeze_llm=self.is_freeze_llm)
         # 加载权重逻辑：如果有初始化权重路径，尝试加载
         if self.init_weights_path:
             print(f"正在从 {self.init_weights_path} 加载模型权重...")
@@ -104,9 +104,12 @@ class ModelTrainer:
             dataset = PretrainDataset(self.train_bin)
         val_size = min(500, int(len(dataset) * 0.01)) if len(dataset) > 500 else 1
         train_size = len(dataset) - val_size
-        self.train_dataset, self.val_dataset = torch.utils.data.random_split(
-            dataset, [train_size, val_size]
-        )
+        
+        # 优化：避免使用 random_split 产生巨大的随机索引列表 (1B 数据下会占 GB 级内存)
+        # 直接使用 range 进行切片，Sampler 内部会自动进行 shuffle
+        self.train_dataset = torch.utils.data.Subset(dataset, range(train_size))
+        self.val_dataset = torch.utils.data.Subset(dataset, range(train_size, len(dataset)))
+        
         print(f"[Data] 数据集划分完成: 训练集 {train_size} 条, 验证集 {val_size} 条")
 
     def train(self):
@@ -176,19 +179,22 @@ class ModelTrainer:
 
     @staticmethod
     def _load_model_weights(model, path):
-        """辅助函数：手动加载模型权重"""
+        """辅助函数：手动加载模型权重，优化内存占用"""
         if not path or not os.path.exists(path): return False
         bin_path = os.path.join(path, "pytorch_model.bin")
         try:
-            state_dict = torch.load(bin_path, map_location='cpu', weights_only=True)
-            # 使用 strict=False 允许部分加载 (如 LLM -> VLM)
+            # 使用 mmap=True 实现内存映射加载，避免将整个文件读入物理内存
+            # weights_only=True 是安全加载的推荐做法
+            state_dict = torch.load(bin_path, map_location='cpu', weights_only=True, mmap=True)
+            
+            # 使用 strict=False 允许部分加载 (如从 LLM 权重初始化 VLM)
             missing, unexpected = model.load_state_dict(state_dict, strict=False)
-            print(f"[System] 成功从 {bin_path} 加载权重")
+            
+            print(f"[System] 成功从 {bin_path} 加载权重 (使用 mmap 模式)")
             if missing:
-                print(f"  [Info] 缺失权重 (将保持初始化状态): {len(missing)} 个 keys")
-                print(f"  示例: {missing[:3]} ...")
+                print(f"  [Info] 缺失权重: {len(missing)} 个 keys")
             if unexpected:
-                print(f"  [Info] 未匹配权重 (将被忽略): {len(unexpected)} 个 keys")
+                print(f"  [Info] 未匹配权重: {len(unexpected)} 个 keys")
             return True
         except Exception as e: 
             print(f"[Error] 加载权重失败: {e}")
@@ -209,7 +215,8 @@ class ModelTrainer:
                 # 场景 1 & 2: LLM 预训练
                 self.output_dir = LLM_PRETRAIN_DIR
                 self.train_bin = os.path.join(self.dataset_root, 'data_llm', 'pretrain.bin')
-                self.init_weights_path = None # LLM 预训练从头开始或从最新 checkpoint 恢复
+                # LLM 预训练从头开始或从最新 checkpoint 恢复（如果预训练没有断点且有微调，可以从微调加载权重继续训练）
+                self.init_weights_path = self._get_latest_checkpoint(LLM_FINETUNE_DIR)
             else:
                 # 场景 3 & 4: LLM 微调
                 self.output_dir = LLM_FINETUNE_DIR

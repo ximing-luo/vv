@@ -199,40 +199,69 @@ class TokenBucketSampler(Sampler):
     def __init__(self, dataset, max_tokens):
         self.dataset = dataset
         self.max_tokens = max_tokens
-        self.lengths = self._get_lengths(dataset)
+        # 不在 init 里存储 lengths 和 sorted_indices 数组
+        # 这样在 Windows 下序列化发送给子进程时，Sampler 对象只有几 KB
+        self._num_batches = None 
 
     def _get_lengths(self, dataset):
         """递归获取数据集长度，支持嵌套的 Subset"""
         if hasattr(dataset, 'lengths'): return dataset.lengths
         if hasattr(dataset, 'dataset') and hasattr(dataset, 'indices'):
             base = self._get_lengths(dataset.dataset)
+            # 注意：这里的切片会产生一个新数组，我们只在需要时调用它
             return base[dataset.indices]
         return None
 
     def __iter__(self):
-        # 1. 智能排序：按长度聚类以减少 Padding
-        indices = np.argsort(self.lengths)
-        # 2. 贪婪分桶：动态构建 Batch
-        batches, batch, max_len = [], [], 0
-        for idx in indices:
-            curr_len = self.lengths[idx]
-            if batch and (len(batch) + 1) * max(max_len, curr_len) > self.max_tokens:
-                batches.append(batch)
-                batch, max_len = [], 0
-            batch.append(idx)
+        # 1. 在迭代开始时现场获取长度并排序 (作为局部变量，不挂载到 self)
+        lengths = self._get_lengths(self.dataset)
+        if lengths is None:
+            for i in range(len(self.dataset)): yield [i]
+            return
+            
+        indices = np.argsort(lengths).astype(np.int64)
+        sorted_lengths = lengths[indices]
+        
+        # 2. 寻找边界
+        boundaries = [0]
+        curr_batch_size, max_len = 0, 0
+        for i, curr_len in enumerate(sorted_lengths):
+            if curr_batch_size > 0 and (curr_batch_size + 1) * max(max_len, curr_len) > self.max_tokens:
+                boundaries.append(i)
+                curr_batch_size, max_len = 0, 0
+            curr_batch_size += 1
             max_len = max(max_len, curr_len)
-        # 3. 随机打乱 Batch 顺序并输出 (丢弃最后一个不满的 Batch)
-        np.random.shuffle(batches)
-        return iter(batches)
+            
+        # 3. 打乱并 yield
+        num_batches = len(boundaries) - 1
+        shuffled_ids = np.random.permutation(num_batches)
+        for b_id in shuffled_ids:
+            start, end = boundaries[b_id], boundaries[b_id + 1]
+            yield indices[start:end].tolist()
 
     def __len__(self):
-        # 注意：这里的长度只是近似的，因为动态 Batch Size 每次迭代可能不同
-        # 但为了 DataLoader 的兼容性，我们需要返回一个值
-        # 这里我们预估一个平均 Batch Size
-        avg_len = np.mean(self.lengths)
-        # 平均每个 Batch 包含的样本数
-        avg_batch_size = max(1, self.max_tokens // avg_len)
-        return int(np.ceil(len(self.dataset) / avg_batch_size))
+        """
+        精确计算 Batch 数量，但保证计算过程中的临时大数组不被持久化到 self 中。
+        """
+        if self._num_batches is not None:
+            return self._num_batches
+
+        # 现场提取并计算，使用局部变量
+        lengths = self._get_lengths(self.dataset)
+        if lengths is None: return len(self.dataset)
+        
+        # 排序并扫描一次以获得准确数量
+        sorted_lengths = np.sort(lengths)
+        count, curr_batch_size, max_len = 0, 0, 0
+        for l in sorted_lengths:
+            if curr_batch_size > 0 and (curr_batch_size + 1) * max(max_len, l) > self.max_tokens:
+                count += 1
+                curr_batch_size, max_len = 0, 0
+            curr_batch_size += 1
+            max_len = max(max_len, l)
+        
+        self._num_batches = count
+        return self._num_batches
 
 def dynamic_collate_fn(batch, padding_value=0):
     """

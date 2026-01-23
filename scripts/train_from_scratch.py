@@ -37,15 +37,15 @@ def sample():
     METADATA_ROOT_DIR = os.path.join(data_path, 'metadata')
     sampler = DataSampler(BASE_DATABASE_DIR, METADATA_ROOT_DIR)
     vlm_sampler = VLMSampler(BASE_DATABASE_DIR, METADATA_ROOT_DIR)
-    sampler.sample_wudao(target_gb=0.1, split_size_mb=20)
-    sampler.sample_novel(target_gb=0.1, split_size_mb=20)
-    sampler.sample_pretrain_minimind(target_gb=0.1, split_size_mb=20)
+    sampler.sample_wudao(target_gb=2, split_size_mb=20)
+    sampler.sample_novel(target_gb=0.5, split_size_mb=20)
+    sampler.sample_pretrain_minimind(target_gb=1.5, split_size_mb=20)
 
-    sampler.sample_sft(target_gb=0.1, split_size_mb=20)
-    sampler.sample_firefly(target_gb=0.1, split_size_mb=20)
-    sampler.sample_chat(target_gb=0.1, split_size_mb=20)
+    sampler.sample_sft(target_gb=2, split_size_mb=20)
+    sampler.sample_firefly(target_gb=1, split_size_mb=20)
+    sampler.sample_chat(target_gb=1, split_size_mb=20)
 
-    vlm_sampler.run_minimind_v_pipeline(target_gb=0.1,num_preview=5 , split_size_mb=20)
+    # vlm_sampler.run_minimind_v_pipeline(target_gb=2,num_preview=5 , split_size_mb=20)
 
 def train_token():
     DATA_DIR = [os.path.join(data_path, 'metadata', 'pretrain'),
@@ -78,17 +78,17 @@ def train_from_scratch():
 
 
 if __name__ == "__main__":
-    delete_data(paths_to_delete) # 如果需要清空数据，取消此行注释
-    sample()
-    train_token()
-    preprocess(num_workers=4,
-        pretrain_sample_ratio=1,
-        mixed_sample_ratio=0.1,
-        finetune_sample_ratio=1
-        )
-    preprocess_vlm(num_workers=4)
+    # delete_data(paths_to_delete) # 如果需要清空数据，取消此行注释
+    # sample()
+    # train_token()
+    # preprocess(num_workers=8,
+    #     pretrain_sample_ratio=1,
+    #     mixed_sample_ratio=0.1,
+    #     finetune_sample_ratio=1
+    #     )
+    # preprocess_vlm(num_workers=4)
 
-    train(mode='pretrain', is_vlm=False, num_train_epochs=1, eval_steps=250, save_steps=500)
-    train(mode='finetune', is_vlm=False, num_train_epochs=1, eval_steps=500, save_steps=500)
-    train(mode='pretrain', is_vlm=True, num_train_epochs=1, eval_steps=250, save_steps=250)
-    train(mode='finetune', is_vlm=True, num_train_epochs=1, eval_steps=250, save_steps=250)
+    train(mode='pretrain', is_vlm=False, num_train_epochs=1, eval_steps=500, save_steps=500, is_freeze_llm= False)
+    train(mode='finetune', is_vlm=False, num_train_epochs=1, eval_steps=500, save_steps=500, is_freeze_llm= False)
+    # train(mode='pretrain', is_vlm=True, num_train_epochs=1, eval_steps=500, save_steps=500)
+    # train(mode='finetune', is_vlm=True, num_train_epochs=1, eval_steps=500, save_steps=500)
