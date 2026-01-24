@@ -377,9 +377,9 @@ def preprocess(num_workers = 16, pretrain_sample_ratio=1.0, finetune_sample_rati
     pipeline.save_sequences(total_sequences_iter, finetune_output_bin, mode='finetune')
 
 if __name__ == "__main__":
-    # preprocess(num_workers=24,
-    #     pretrain_sample_ratio=1,
-    #     finetune_sample_ratio=1,
-    #     mixed_sample_ratio=0.1
-    #     )
-    test()
+    preprocess(num_workers=8,
+        pretrain_sample_ratio=1,
+        finetune_sample_ratio=1,
+        mixed_sample_ratio=0.1
+        )
+    # test()

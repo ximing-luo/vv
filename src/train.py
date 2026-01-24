@@ -270,5 +270,5 @@ def train(mode, is_vlm=False, num_train_epochs=1, eval_steps=500, save_steps=500
 
 if __name__ == "__main__":
     mode = 'pretrain' # pretrain or finetune
-    is_vlm = True # 是否是训练vlm
-    train(mode=mode, is_vlm=is_vlm, num_train_epochs=1.5, eval_steps=500, save_steps=500)
+    is_vlm = False # 是否是训练vlm
+    train(mode=mode, is_vlm=is_vlm, num_train_epochs=0.1, eval_steps=500, save_steps=500, is_freeze_llm=False)

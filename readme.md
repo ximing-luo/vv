@@ -56,8 +56,6 @@
 - [Minimind](https://github.com/jingyaogong/minimind)
 - [My_LLM](https://github.com/REXWindW/my_llm)
 
-本项目还在更新阶段，欢迎大家一起研究。
-
 ## 数据集下载
 
 如果你看到这里还是对本项目感兴趣，欢迎下载我用到的数据集到 `src/data/database/` 目录下，亲自体验从 0 训练 VLM 的感觉。

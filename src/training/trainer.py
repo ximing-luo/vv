@@ -10,36 +10,33 @@ from .tools.rollback import RollbackCallback
 test_cases = [
     {
         'prompt': (
-            "　　阳春三月。\n"
-            "　　绵密的细雨淋湿山林，到处都是雾蒙蒙的白茫茫一片。\n"
-            "　　即便如此。\n"
-            "　　也仍然抵挡不住村中长舌妇们尽情地吐着沫子八卦着。"
+            "这个词语是什么意思？不堪入目\n"
         ),
         'mode': 'pretrain',
-        'max_new_tokens': 400,
+        'max_new_tokens': 100,
         'temperature': 1.3,
         'top_k': 75
     },
     {
         'prompt': (
-            "贯彻落实国家和省市有关能源工作的法律、法规和政策，研究提出 如东县能源发展战略的建议，"
+            "文言文翻译：恬既孝行殊异，声著邦壤，敦风厉俗，弘益兹多。\n"
         ),
         'mode': 'pretrain',
+        'max_new_tokens': 100,
+        'temperature': 1.3,
+        'top_k': 75
+    },
+    {
+        'prompt': "请解释一下为什么日落时海水会变成绿色的。",
+        'mode': 'chat',
         'max_new_tokens': 200,
         'temperature': 1.3,
         'top_k': 75
     },
     {
-        'prompt': "用诗歌或散文形式，描述一个美丽的日出或日落场景。",
+        'prompt': "请写一篇五言律诗，题目为“春风十里不如你”。",
         'mode': 'chat',
-        'max_new_tokens': 200,
-        'temperature': 1.3,
-        'top_k': 75 
-    },
-    {
-        'prompt': "中国古代四大发明是什么。",
-        'mode': 'chat',
-        'max_new_tokens': 50,
+        'max_new_tokens': 100,
         'temperature': 1.3,
         'top_k': 75 
     },

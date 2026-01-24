@@ -15,7 +15,7 @@ class InferenceCallback(TrainerCallback):
     def on_evaluate(self, args, state, control, model, metrics=None, **kwargs):
         model.eval()
         # 获取设备
-        device = next(model.parameters()).device
+        device = model.device
             
         for idx, case in enumerate(self.test_cases):
             prompt = case.get('prompt', "")

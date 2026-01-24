@@ -17,6 +17,11 @@ class VV(nn.Module):
         self.lm_head.weight = self.token_embedding_table.weight
         self.apply(self._init_weights)
 
+    @property
+    def device(self):
+        """获取模型当前所在的设备"""
+        return next(self.parameters()).device
+
     def _init_weights(self, module):
         if isinstance(module, nn.Linear):
             # 这里使用的是正态分布初始化

@@ -80,8 +80,9 @@ class PretrainDataset(Dataset):
         # 统一返回 (X, Y) 模式，供模型 forward 使用
         # X: 0 到 n-1 (输入)
         # Y: 1 到 n   (预测目标)
-        X = torch.from_numpy(seq[:-1])
-        Y = torch.from_numpy(seq[1:])
+        # 增加 .clone() 彻底切断与原始内存的联系，防止 overlapping 导致的内存损坏
+        X = torch.from_numpy(seq[:-1]).clone()
+        Y = torch.from_numpy(seq[1:]).clone()
         
         return X, Y
 
