@@ -249,7 +249,7 @@ class ModelTrainer:
         """动态计算 Batch Size 和 Gradient Accumulation Steps"""
         # 计算最大序列长度，考虑 NTK 扩展
         max_seq_len = int(model_config.max_seq_len * model_config.rope_ntk_alpha)
-        train_batch_size = max(1, int((2048+1024) // max_seq_len)) # 单卡最大吞吐量 2048 tokens
+        train_batch_size = max(1, int((2048) // max_seq_len)) # 单卡最大吞吐量 2048 tokens
         grad_steps = max(1, int(64 // train_batch_size))
         # train_batch_size = 64
         # grad_steps = 1
