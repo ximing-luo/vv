@@ -158,7 +158,7 @@ class ModelTrainer:
             fp16=torch.cuda.is_available() and torch.cuda.get_device_capability()[0] < 8,
             dataloader_num_workers=4, # 多进程加载数据
             dataloader_pin_memory=True, # 锁页内存，加速 CPU 到 GPU 传输
-            max_grad_norm=10.0, # 梯度裁剪，防止梯度爆炸
+            max_grad_norm=10.0, # 梯度裁剪
             disable_tqdm=False, # 强制开启进度条
         )
         trainer = DynamicTrainer(model=self.model,

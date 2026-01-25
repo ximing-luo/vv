@@ -178,8 +178,9 @@ class GroupedQueryAttention(nn.Module):
 
         # 使用 Flash Attention (SDPA)
         # 训练时使用 dropout，推理时 dropout_p=0
+        # 增加 .contiguous() 以提升在 Windows/BF16 环境下的内核执行稳定性
         y = F.scaled_dot_product_attention(
-            q, k, v, 
+            q.contiguous(), k.contiguous(), v.contiguous(), 
             attn_mask=None,
             dropout_p=self.dropout if self.training else 0, 
             is_causal=True
@@ -311,8 +312,9 @@ class MultiHeadLatentAttention(nn.Module):
         k = torch.cat([k_nop, k_pe], dim=-1) # (B, H, T, kv_head_dim + rope_head_dim)
         
         # 使用 Flash Attention
+        # 增加 .contiguous() 以提升在 Windows/BF16 环境下的内核执行稳定性
         y = F.scaled_dot_product_attention(
-            q, k, v,
+            q.contiguous(), k.contiguous(), v.contiguous(),
             attn_mask=None,
             dropout_p=self.dropout if self.training else 0,
             is_causal=True

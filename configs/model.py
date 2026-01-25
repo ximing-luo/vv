@@ -5,7 +5,7 @@ from typing import List
 class VVConfig:
     max_seq_len: int = 512
     n_layer: int = 8
-    n_head: int = 8
+    n_head: int = 4
     n_kv_head: int = 2   # 组注意力，头数可以小于 n_head，用于减少计算量
     hidden_dim: int = 512
     dropout: float = 0.1
@@ -18,7 +18,7 @@ class VVConfig:
     pad_token_id: int = None
     # MoE 相关配置
     intermediate_size: int = None
-    num_experts: int = 3
+    num_experts: int = 4
     num_experts_per_tok: int = 1
     num_shared_experts: int = 1
     bias_update_rate: float = 0.001

@@ -6,6 +6,7 @@ from .tools.log import CustomTensorBoardCallback
 from .tools.checkpoint import CheckpointCallback
 from .tools.inference import InferenceCallback
 from .tools.rollback import RollbackCallback
+from .tools.scheduler import BatchSizeSchedulerCallback
 
 test_cases = [
     {
@@ -71,7 +72,8 @@ class DynamicTrainer(Trainer):
             CheckpointCallback(),        # 检查点自动导出
             RollbackCallback(rollback_threshold=3.0), # 自动回退
             EarlyStoppingCallback(early_stopping_patience=10), # 早停
-            InferenceCallback(tokenizer=tokenizer, test_cases=test_cases) # 推理模拟
+            InferenceCallback(tokenizer=tokenizer, test_cases=test_cases), # 推理模拟
+            BatchSizeSchedulerCallback(initial_grad_steps=args.gradient_accumulation_steps, strategy="milestones") # 动态 Batch Size
         ])
         
         super().__init__(
