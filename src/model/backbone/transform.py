@@ -28,8 +28,8 @@ class BaseMoEBlock(nn.Module):
         self.norm2 = RMSNorm(config.hidden_dim)
         self.mlp = SharedMoE(config)
 
-    def forward(self, x):
-        x = x + self.attn(self.norm1(x))
+    def forward(self, x, position_ids=None):
+        x = x + self.attn(self.norm1(x), position_ids=position_ids)
         x = x + self.mlp(self.norm2(x))
         return x
 
@@ -41,8 +41,8 @@ class MoeBlock(nn.Module):
         self.norm2 = RMSNorm(config.hidden_dim)
         self.mlp = AuxiliaryLossMoE(config)
 
-    def forward(self, x):
-        x = x + self.attn(self.norm1(x))
+    def forward(self, x, position_ids=None):
+        x = x + self.attn(self.norm1(x), position_ids=position_ids)
         mlp_out, aux_loss = self.mlp(self.norm2(x))
         x = x + mlp_out
         return x, aux_loss
@@ -59,8 +59,8 @@ class DeepseekBlock(nn.Module):
         self.norm2 = RMSNorm(config.hidden_dim)
         self.mlp = DeepseekMoE(config)
 
-    def forward(self, x):
-        x = x + self.attn(self.norm1(x))
+    def forward(self, x, position_ids=None):
+        x = x + self.attn(self.norm1(x), position_ids=position_ids)
         x = x + self.mlp(self.norm2(x))
         return x
 

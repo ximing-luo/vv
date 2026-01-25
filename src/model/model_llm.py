@@ -31,12 +31,21 @@ class VV(nn.Module):
         elif isinstance(module, nn.Embedding):
             torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
 
-    def forward(self, input_ids, labels=None, **kwargs):
+    def forward(self, input_ids, labels=None, position_ids=None, **kwargs):
         # input_ids 是输入的 token ids
         batch, seq_len = input_ids.size()
 
+        if position_ids is None:
+            # 默认生成连续的 position_ids: [0, 1, 2, ..., seq_len-1]
+            position_ids = torch.arange(seq_len, device=input_ids.device).unsqueeze(0).expand(batch, -1)
+
         token_emb = self.token_embedding_table(input_ids)
-        x = self.blocks(token_emb)
+        
+        # 逐层传递 position_ids
+        x = token_emb
+        for block in self.blocks:
+            x = block(x, position_ids=position_ids)
+            
         x = self.norm(x)
         logits = self.lm_head(x)   # shape is (batch, seq_len, vocab_size)
         

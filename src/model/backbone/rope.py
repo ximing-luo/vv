@@ -88,14 +88,15 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None):
     q, k: [batch, n_head, seq_len, head_dim]  (注意：这里假设已经转置为 BHSD 格式)
     cos, sin: [seq_len, head_dim] or [1, seq_len, 1, head_dim]
     """
-    # 调整 cos, sin 形状以匹配 q, k
-    # cos, sin 原本是 [seq_len, dim]
-    # 需要变成 [1, 1, seq_len, dim] 或者配合广播机制
-    
-    # 假设 q, k 是 [Batch, Heads, SeqLen, Dim]
-    # cos, sin 是 [SeqLen, Dim] -> [1, 1, SeqLen, Dim]
-    cos = cos.unsqueeze(0).unsqueeze(0)
-    sin = sin.unsqueeze(0).unsqueeze(0)
+    if position_ids is not None:
+        # position_ids: [batch, seq_len]
+        # 从缓存中根据 position_ids 提取对应的 cos, sin
+        cos = cos[position_ids].unsqueeze(1) # [batch, 1, seq_len, dim]
+        sin = sin[position_ids].unsqueeze(1) # [batch, 1, seq_len, dim]
+    else:
+        # 默认假设是连续的 0:seq_len
+        cos = cos.unsqueeze(0).unsqueeze(0) # [1, 1, seq_len, dim]
+        sin = sin.unsqueeze(0).unsqueeze(0) # [1, 1, seq_len, dim]
     
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)

@@ -25,6 +25,7 @@ class VVConfig:
     # RoPE 配置
     rope_base: float = 10000.0
     rope_ntk_alpha: float = 1.0  # NTK 的扩展倍数
+    rope_head_dim: int = 64      # RoPE 部分的维度
     
 @dataclass
 class VisualVVConfig(VVConfig):

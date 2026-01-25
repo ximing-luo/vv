@@ -214,11 +214,11 @@ class MultiHeadLatentAttention(nn.Module):
         
         # MLA 特有参数，如果没有定义则使用默认比例
         # kv_lora_rank: KV 压缩后的潜变量维度
-        self.kv_lora_rank = getattr(args, "kv_lora_rank", 64)
+        self.kv_lora_rank = getattr(args, "kv_lora_rank", 128)
         # q_lora_rank: Query 压缩后的潜变量维度 (DeepSeek-V2 使用，可选)
         self.q_lora_rank = getattr(args, "q_lora_rank", 96)
         # rope_head_dim: RoPE 部分的维度 (通常较小，如 64)
-        self.rope_head_dim = getattr(args, "rope_head_dim", 16)
+        self.rope_head_dim = getattr(args, "rope_head_dim", 64)
         # kv_head_dim: Key/Value 的头维度 (通常等于 head_size)
         self.kv_head_dim = self.head_size 
         # q_head_dim: Query (nop) 的头维度
@@ -241,7 +241,7 @@ class MultiHeadLatentAttention(nn.Module):
         self.kv_up_proj = nn.Linear(self.kv_lora_rank, self.n_kv_head * (self.kv_head_dim + self.kv_head_dim), bias=args.bias)
         # k_pe_proj: Key 的 RoPE 部分 (共享，直接 from 原始输入 x 投影)
         self.k_pe_proj = nn.Linear(self.hidden_dim, self.rope_head_dim, bias=args.bias)
-        self.k_pe_norm = RMSNorm(self.rope_head_dim) # 通常在投影后也会加个 norm
+        # self.k_pe_norm = RMSNorm(self.rope_head_dim) # [已注释] 通常在投影后也会加个 norm
 
         # RoPE
         self.rotary_emb = NTKAwareRotaryEmbedding(
@@ -256,8 +256,14 @@ class MultiHeadLatentAttention(nn.Module):
 
         # Output Projection
         self.c_proj = nn.Linear(self.n_head * self.kv_head_dim, self.hidden_dim, bias=args.bias)
-
-    def forward(self, x):
+        
+        # MLA 缩放因子: 用于平衡内容(nop)和位置(pe)点积后的数值量级
+        # 参考 DeepSeek 实现，通常是一个可学习或固定的缩放系数
+        self.softmax_scale = (self.q_head_dim + self.rope_head_dim) ** -0.5
+        # 如果需要更精细的控制，可以分别为 nop 和 pe 设置不同的 scale
+        # 但在 SDPA 中，我们通常统一缩放拼接后的 q, k
+    
+    def forward(self, x, position_ids=None):
         B, T, C = x.shape
         
         # --- Query Generation ---
@@ -287,7 +293,7 @@ class MultiHeadLatentAttention(nn.Module):
         
         # k_pe 是共享的，直接从 x 投影
         k_pe = self.k_pe_proj(x)
-        k_pe = self.k_pe_norm(k_pe)
+        # k_pe = self.k_pe_norm(k_pe) # [已注释] 移除额外的 Norm 以增强位置信号
         k_pe = k_pe.view(B, T, 1, self.rope_head_dim)
         
         # --- Transpose for Attention ---
@@ -303,7 +309,7 @@ class MultiHeadLatentAttention(nn.Module):
         cos, sin = self.rotary_emb(v, seq_len=T) # v 只是用来拿 seq_len，不参与 RoPE
         # 注意：apply_rotary_pos_emb 期望的是 (B, H, T, D)
         # 这里 k_pe 是 (B, 1, T, D)，apply_rotary_pos_emb 会通过广播处理
-        q_pe, k_pe = apply_rotary_pos_emb(q_pe, k_pe, cos, sin)
+        q_pe, k_pe = apply_rotary_pos_emb(q_pe, k_pe, cos, sin, position_ids=position_ids)
         
         # k_pe 需要扩展到 n_head
         k_pe = k_pe.expand(-1, self.n_head, -1, -1)
@@ -313,11 +319,13 @@ class MultiHeadLatentAttention(nn.Module):
         
         # 使用 Flash Attention
         # 增加 .contiguous() 以提升在 Windows/BF16 环境下的内核执行稳定性
+        # 使用自定义的 softmax_scale 替代默认的 1/sqrt(dk)
         y = F.scaled_dot_product_attention(
             q.contiguous(), k.contiguous(), v.contiguous(),
             attn_mask=None,
             dropout_p=self.dropout if self.training else 0,
-            is_causal=True
+            is_causal=True,
+            scale=self.softmax_scale
         )
         
         # 恢复形状

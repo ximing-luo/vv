@@ -57,6 +57,9 @@ class BatchSizeSchedulerCallback(TrainerCallback):
         
         if new_grad_steps != old_grad_steps:
             args.gradient_accumulation_steps = new_grad_steps
-            # 注意：在训练过程中打印日志不要太频繁
-            if state.global_step % 100 == 0 or progress in self.milestones:
-                print(f"\n[Scheduler] 进度 {progress:.1%}: 梯度累积步数调整 {old_grad_steps} -> {new_grad_steps}")
+            
+            # 打印逻辑优化：
+            # 1. 如果是里程碑策略，只要步数发生变化（即触碰了里程碑）就打印
+            # 2. 如果是线性或指数策略，每隔 100 步打印一次，避免频繁刷屏
+            if self.strategy == "milestones" or state.global_step % 100 == 0:
+                print(f"\n[Scheduler] 进度 {progress:.2%}: 梯度累积步数调整 {old_grad_steps} -> {new_grad_steps}")

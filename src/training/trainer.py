@@ -15,8 +15,8 @@ test_cases = [
         ),
         'mode': 'pretrain',
         'max_new_tokens': 100,
-        'temperature': 1.3,
-        'top_k': 75
+        'temperature': 0.9,
+        'top_k': 55
     },
     {
         'prompt': (
@@ -24,30 +24,30 @@ test_cases = [
         ),
         'mode': 'pretrain',
         'max_new_tokens': 100,
-        'temperature': 1.3,
-        'top_k': 75
+        'temperature': 0.9,
+        'top_k': 55
     },
     {
         'prompt': "请解释一下为什么日落时海水会变成绿色的。",
         'mode': 'chat',
         'max_new_tokens': 200,
-        'temperature': 1.3,
-        'top_k': 75
+        'temperature': 0.9,
+        'top_k': 55
     },
     {
         'prompt': "请写一篇五言律诗，题目为“春风十里不如你”。",
         'mode': 'chat',
         'max_new_tokens': 100,
-        'temperature': 1.3,
-        'top_k': 75 
+        'temperature': 0.9,
+        'top_k': 55 
     },
     {
         'prompt': ("请描述这张图片。<image>"),
         'mode': 'vlm',
         'max_new_tokens': 50,
-        'temperature': 1.3,
-        'top_k': 75,
-        'image_path': r'D:\Axon\ANN\llm\vv\src\data\database\gongjy\minimind-v_dataset\eval_images\彩虹瀑布-Rainbow-Falls .jpg'
+        'temperature': 0.9,
+        'top_k': 55,
+        'image_path': r'./src/data/database/gongjy/minimind-v_dataset/eval_images/彩虹瀑布-Rainbow-Falls .jpg'
     }
 ]
 

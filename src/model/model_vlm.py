@@ -130,14 +130,23 @@ class VisualVV(VV):
                 input_ids: Optional[torch.Tensor] = None,
                 labels: Optional[torch.Tensor] = None,
                 pixel_values: Optional[torch.FloatTensor] = None,
+                position_ids: Optional[torch.Tensor] = None,
                 **kwargs): 
         batch_size, seq_length = input_ids.shape
+
+        if position_ids is None:
+            # 默认生成连续的 position_ids: [0, 1, 2, ..., seq_len-1]
+            position_ids = torch.arange(seq_length, device=input_ids.device).unsqueeze(0).expand(batch_size, -1)
+
         x = self.token_embedding_table(input_ids)
 
         # 融合视觉嵌入
         x = self._apply_vision_embeddings(input_ids, x, pixel_values, seq_length)
         
-        x = self.blocks(x)
+        # 逐层传递 position_ids
+        for block in self.blocks:
+            x = block(x, position_ids=position_ids)
+
         x = self.norm(x)
         logits = self.lm_head(x)
 
