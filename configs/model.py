@@ -6,10 +6,10 @@ class VVConfig:
     # --- 基础架构配置 ---
     vocab_size: int = None         # 词表大小 (外部指定)
     hidden_dim: int = 512          # 隐藏层维度
+    intermediate_size: int = None  # FFN 中间层维度 (None 则自动计算)
     n_layer: int = 10              # 层数
     n_head: int = 4                # 注意力头数
     n_kv_head: int = 2             # KV 头数 (GQA/MLA 使用)
-    intermediate_size: int = None  # FFN 中间层维度 (None 则自动计算)
     max_seq_len: int = 512         # 原始/基础最大序列长度 (训练时的长度)
     dropout: float = 0.1           # Dropout 概率
     bias: bool = False             # 是否使用偏置
@@ -21,8 +21,7 @@ class VVConfig:
     
     # --- RoPE / YaRN 配置 ---
     rope_base: float = 10000.0     # RoPE 基数
-    rope_ntk_alpha: float = 1.0    # NTK 扩展倍数 (Legacy)
-    rope_scale: float = 1.0        # YaRN 插值缩放比例 (扩展倍数，1.0 代表不扩展)
+    rope_scale: float = 1.0        # YaRN 插值/NTK 扩展倍数 (1.0 代表不扩展)
 
     # --- MoE (Mixture of Experts) 配置 ---
     num_experts: int = 4           # 总专家数

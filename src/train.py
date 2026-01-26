@@ -6,6 +6,11 @@ import torch
 from transformers import TrainingArguments, AutoTokenizer
 # 环境配置与安全检查绕过
 os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
+# [优化] 显存分配策略配置
+# expandable_segments:True -> 允许分配器创建可扩展的段，有效缓解碎片化问题，防止 Reserved 虚高
+# max_split_size_mb:128 -> 限制大块内存被切分，强制让大张量去申请新块，减少碎片
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128"
+
 try:
     # 绕过 transformers 的 torch.load 安全检查 (CVE-2025-32434)
     import transformers.utils.import_utils as import_utils
@@ -74,8 +79,8 @@ class ModelTrainer:
             eos_token_id=self.tokenizer.eos_token_id,
             pad_token_id=self.tokenizer.pad_token_id,
         )
-        # 如果是预训练模式 (pretrain)，强制重置 rope_ntk_alpha = 1.0
-        if self.mode == 'pretrain': self.config.rope_ntk_alpha = 1.0
+        # 如果是预训练模式 (pretrain)，强制重置 rope_scale = 1.0
+        if self.mode == 'pretrain': self.config.rope_scale = 1.0
         self.model = VisualVV(self.config, freeze_llm=self.is_freeze_llm, is_load_vision_encoder=self.is_vlm)
         # 加载权重逻辑：如果有初始化权重路径，尝试加载
         if self.init_weights_path:
@@ -247,12 +252,12 @@ class ModelTrainer:
     @staticmethod
     def _dynamic_batch_size(model_config):
         """动态计算 Batch Size 和 Gradient Accumulation Steps"""
-        # 计算最大序列长度，考虑 NTK 扩展
-        max_seq_len = int(model_config.max_seq_len * model_config.rope_ntk_alpha)
-        train_batch_size = max(1, int((2048) // max_seq_len)) # 单卡最大吞吐量 2048 tokens
-        grad_steps = max(1, int(64 // train_batch_size))
-        # train_batch_size = 64
-        # grad_steps = 1
+        # 计算最大序列长度，考虑 NTK/YaRN 扩展
+        max_seq_len = int(model_config.max_seq_len * model_config.rope_scale)
+        # train_batch_size = max(1, int((2048) // max_seq_len)) # 单卡最大吞吐量 2048 tokens
+        # grad_steps = max(1, int(64 // train_batch_size))
+        train_batch_size = 4
+        grad_steps = 16
         print(f"[System] 动态计算得到的 Batch Size: {train_batch_size}")
         print(f"[System] 动态计算得到的 Gradient Accumulation Steps: {grad_steps}")
         return train_batch_size, grad_steps

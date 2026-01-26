@@ -78,9 +78,9 @@ class GroupedQueryAttention(nn.Module):
         
         self.rotary_emb = NTKRotaryEmbedding(
             dim=self.head_size,
-            max_position_embeddings=int(config.max_seq_len * config.rope_ntk_alpha),
+            max_position_embeddings=int(config.max_seq_len * config.rope_scale),
             base=config.rope_base,
-            alpha=config.rope_ntk_alpha
+            scale=config.rope_scale
         )
         self.qkv_proj = nn.Linear(
             config.hidden_dim, (self.n_head + 2 * self.n_kv_head) * self.head_size, bias=config.bias

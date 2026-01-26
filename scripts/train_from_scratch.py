@@ -88,7 +88,7 @@ if __name__ == "__main__":
     #     )
     # preprocess_vlm(num_workers=4)
 
-    train(mode='pretrain', is_vlm=False, num_train_epochs=1.3, eval_steps=500, save_steps=500, is_freeze_llm= False)
-    train(mode='finetune', is_vlm=False, num_train_epochs=1, eval_steps=500, save_steps=500, is_freeze_llm= False)
+    train(mode='pretrain', is_vlm=False, num_train_epochs=10, eval_steps=500, save_steps=500, is_freeze_llm= False)
+    train(mode='finetune', is_vlm=False, num_train_epochs=10, eval_steps=500, save_steps=500, is_freeze_llm= False)
     # train(mode='pretrain', is_vlm=True, num_train_epochs=1, eval_steps=500, save_steps=500)
     # train(mode='finetune', is_vlm=True, num_train_epochs=1, eval_steps=500, save_steps=500)

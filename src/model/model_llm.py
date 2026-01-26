@@ -53,7 +53,7 @@ class BaseModel(nn.Module):
         for _ in range(int(max_new_tokens)):
             # 裁剪上下文以适应最大长度 (考虑 RoPE/YaRN 扩展)
             # 实际最大长度 = 原始长度 * 缩放系数
-            scale = max(getattr(self.config, 'rope_scale', 1.0), getattr(self.config, 'rope_ntk_alpha', 1.0))
+            scale = getattr(self.config, 'rope_scale', 1.0)
             max_ctx = int(self.config.max_seq_len * scale)
             idx_cond = idx[:, -max_ctx:] if idx.size(1) > max_ctx else idx
             
@@ -68,7 +68,7 @@ class BaseModel(nn.Module):
     def generate_stream(self, idx, max_new_tokens, temperature=1.0, top_k=None, **kwargs):
         """流式生成器"""
         for _ in range(int(max_new_tokens)):
-            scale = max(getattr(self.config, 'rope_scale', 1.0), getattr(self.config, 'rope_ntk_alpha', 1.0))
+            scale = getattr(self.config, 'rope_scale', 1.0)
             max_ctx = int(self.config.max_seq_len * scale)
             idx_cond = idx[:, -max_ctx:] if idx.size(1) > max_ctx else idx
             

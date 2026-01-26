@@ -11,7 +11,7 @@ from .tools.scheduler import BatchSizeSchedulerCallback
 test_cases = [
     {
         'prompt': (
-            "这个词语是什么意思？不堪入目\n"
+            "以下是一道小学数学题：小明有5个苹果，他想平分给他的3个朋友，每人分多少？\n"
         ),
         'mode': 'pretrain',
         'max_new_tokens': 100,
@@ -20,22 +20,24 @@ test_cases = [
     },
     {
         'prompt': (
-            "文言文翻译：恬既孝行殊异，声著邦壤，敦风厉俗，弘益兹多。\n"
+            "　　方源一身残破的碧绿大袍，披头散发，浑身浴血，环顾四周。\n"
+            "　　山风吹得血袍飘荡，如战旗般嚯嚯作响。\n"
+            "　　鲜红的血液，从身上数百道伤口向外涌着。只是站着一会儿，方源脚下已经积了一大滩的血水。\n"
         ),
         'mode': 'pretrain',
-        'max_new_tokens': 100,
+        'max_new_tokens': 300,
         'temperature': 0.9,
         'top_k': 55
     },
     {
-        'prompt': "请解释一下为什么日落时海水会变成绿色的。",
+        'prompt': "如果太阳不旋转，会发生什么？",
         'mode': 'chat',
         'max_new_tokens': 200,
         'temperature': 0.9,
         'top_k': 55
     },
     {
-        'prompt': "请写一篇五言律诗，题目为“春风十里不如你”。",
+        'prompt': "请给我写一个爱情小说的开头。",
         'mode': 'chat',
         'max_new_tokens': 100,
         'temperature': 0.9,
@@ -89,8 +91,8 @@ class DynamicTrainer(Trainer):
 
     def get_train_dataloader(self):
         # 使用 TokenBucketSampler 实现固定 Token 量的动态批处理
-        # max_tokens = max_seq_len * batch_size * rope_ntk_alpha
-        max_tokens = self.model.config.max_seq_len * self.args.per_device_train_batch_size * self.model.config.rope_ntk_alpha
+        # max_tokens = max_seq_len * batch_size * rope_scale
+        max_tokens = self.model.config.max_seq_len * self.args.per_device_train_batch_size * self.model.config.rope_scale
         sampler = TokenBucketSampler(self.train_dataset, max_tokens=max_tokens)
         # 使用 DataCollatorWrapper 替代 lambda 以支持 Windows 多进程 pickling
         pad_id = self.processing_class.pad_token_id if self.processing_class else 0
@@ -104,7 +106,7 @@ class DynamicTrainer(Trainer):
     def get_eval_dataloader(self, eval_dataset=None):
         # 如果调用 evaluate() 时传入了特定数据集，则优先使用；否则使用初始化时的 eval_dataset
         eval_dataset = eval_dataset if eval_dataset is not None else self.eval_dataset
-        max_tokens = self.model.config.max_seq_len * self.args.per_device_eval_batch_size * self.model.config.rope_ntk_alpha
+        max_tokens = self.model.config.max_seq_len * self.args.per_device_eval_batch_size * self.model.config.rope_scale
         sampler = TokenBucketSampler(eval_dataset, max_tokens=max_tokens)
         pad_id = self.processing_class.pad_token_id if self.processing_class else 0
         

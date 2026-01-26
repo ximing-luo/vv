@@ -58,9 +58,9 @@ class NTKRotaryEmbedding(RotaryEmbedding):
     [演进阶段 2] NTK-Aware RoPE
     通过非线性插值 (调整 Base) 扩展上下文窗口，保持高频信息精度
     """
-    def __init__(self, dim, max_position_embeddings=32768, base=10000, alpha=1.0, device=None):
-        # alpha > 1 时扩展上下文，base 随之增大
-        base = base * alpha ** (dim / (dim - 2))
+    def __init__(self, dim, max_position_embeddings=32768, base=10000, scale=1.0, device=None):
+        # scale > 1 时扩展上下文，base 随之增大
+        base = base * scale ** (dim / (dim - 2))
         super().__init__(dim, max_position_embeddings, base, device)
 
 class YaRNRotaryEmbedding(RotaryEmbedding):

@@ -46,7 +46,7 @@ class CustomTensorBoardCallback(TrainerCallback):
             return
         step = state.global_step
         # 1. 显存监控 (每 10 次日志打印一次)
-        if torch.cuda.is_available() and step % (args.logging_steps * 10) == 0:
+        if torch.cuda.is_available() and (step % (args.logging_steps * 10) == 0 or step == 1):
             allocated = torch.cuda.memory_allocated() / 1024**2
             reserved = torch.cuda.memory_reserved() / 1024**2
             print(f"[System] Step {step} - Memory | Alloc: {allocated:.2f} MB, Reserved: {reserved:.2f} MB")
