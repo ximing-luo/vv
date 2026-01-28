@@ -157,6 +157,34 @@ class DataProcessor:
                     enc = enc[:self.max_seq_len]
                 yield np.array(enc, dtype=np.uint16)
 
+    def process_firefly(self, file_path):
+        """
+        处理 Firefly 数据：instruction 和 output 组成的单轮对话
+        """
+        with open(file_path, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                data = json.loads(line)
+                instruction = data.get('instruction', '')
+                output = data.get('output', '')
+                messages = [
+                    {"role": "user", "content": instruction},
+                    {"role": "assistant", "content": output}
+                ]
+                # 标准函数构建对话数据
+                prompt = self.tokenizer.apply_chat_template(
+                    messages, 
+                    tokenize=False, 
+                    add_generation_prompt=False
+                )
+                enc = self.tokenizer.encode(prompt)
+                # QA对截断，确保长度不超过 max_seq_len
+                if len(enc) > self.max_seq_len:
+                    enc = enc[:self.max_seq_len]
+                yield np.array(enc, dtype=np.uint16)
+
     def process_finetune_file(self, file_path):
             """
             根据文件名自动选择处理方法
@@ -166,6 +194,8 @@ class DataProcessor:
                 yield from self.process_chat(file_path)
             elif 'sft' in path_lower:
                 yield from self.process_sft512(file_path)
+            elif 'firefly' in path_lower:
+                yield from self.process_firefly(file_path)
             else:
                 print(f"未识别的微调文件类型：{file_path}")
 
@@ -173,7 +203,7 @@ class PreprocessPipeline:
     """
     数据预处理流水线，负责收集、处理和保存数据。
     """
-    def __init__(self, tokenizer, max_seq_len, tokenizer_dir, preview_limit=500, exclude_keyword="firefly"):
+    def __init__(self, tokenizer, max_seq_len, tokenizer_dir, preview_limit=500, exclude_keyword=None):
         self.tokenizer = tokenizer
         self.max_seq_len = max_seq_len
         self.processor = DataProcessor(tokenizer, max_seq_len)
@@ -210,7 +240,7 @@ class PreprocessPipeline:
                 for chunk in seq_list:
                     yield chunk
     
-    def save_sequences(self, sequences_iter, output_bin):
+    def save_sequences(self, sequences_iter, output_bin, mode='pretrain'):
         """
         保存序列列表到文件。使用流式写入，支持处理批量 yield 的数据。
         """
@@ -236,17 +266,17 @@ class PreprocessPipeline:
             f_idx.write(struct.pack('<Q', count))
         
         print(f"[Preprocess] 已完成保存。序列数: {count / 10000:.2f} 万, 总 Token 数: {total_tokens / 1e9:.2f} B")
-        preview_path = os.path.join(os.path.dirname(output_bin), "preview.txt")
-        self._decode_preview(self.preview_sequences, preview_path, num_samples=self.preview_limit)
+        preview_path = os.path.join(os.path.dirname(output_bin), f"{mode}.preview.txt")
+        self._decode_preview(self.preview_sequences, preview_path, num_samples=self.preview_limit, mode=mode)
 
     def process_folder(self, input_dir, output_bin, mode='pretrain', sample_ratio=1.0, num_workers=1):
         """
         便捷函数：处理整个文件夹并保存
         """
         sequences = self.collect_sequences(input_dir, mode, sample_ratio=sample_ratio, num_workers=num_workers)
-        self.save_sequences(sequences, output_bin)
+        self.save_sequences(sequences, output_bin, mode)
 
-    def _decode_preview(self, sequences, output_txt_path, num_samples=500):
+    def _decode_preview(self, sequences, output_txt_path, num_samples=500, mode='pretrain'):
         """
         解码预览：从处理后的序列中随机抽取 num_samples 条进行预览。
         """
@@ -255,7 +285,7 @@ class PreprocessPipeline:
 
         sampled_indices = random.sample(range(len(sequences)), min(len(sequences), num_samples))
         with open(output_txt_path, 'w', encoding='utf-8') as f:
-            f.write(f"Preview for processed data\n")
+            f.write(f"Preview for processed {mode} data\n")
             f.write(f"Total sequences: {len(sequences)}\n")
             f.write(f"Total tokens (approx): {sum(len(s) for s in sequences)}\n\n")
             f.write(f">>> Randomly sampled {len(sampled_indices)} sequences:\n")
@@ -292,8 +322,8 @@ def test():
     finetune_input_dir = os.path.join(METADATA_ROOT, "finetune")
     finetune_output_bin = os.path.join(DATASET_ROOT, "finetune", "finetune_data.bin")
     max_seq_len = VVConfig.max_seq_len
-    effective_max_len = int(VVConfig.max_seq_len * VVConfig.rope_ntk_alpha)
-    print(f"[Preprocess] Config max_seq_len: {VVConfig.max_seq_len}, Alpha: {VVConfig.rope_ntk_alpha}")
+    effective_max_len = int(VVConfig.max_seq_len * VVConfig.rope_scale)
+    print(f"[Preprocess] Config max_seq_len: {VVConfig.max_seq_len}, Scale: {VVConfig.rope_scale}")
     print(f"[Preprocess] Using effective max length: {effective_max_len}")
     tokenizer = AutoTokenizer.from_pretrained(TOKENIZER_DIR)
     tokenizer.model_max_length = int(1e12)
@@ -301,16 +331,10 @@ def test():
     pipeline = PreprocessPipeline(tokenizer, max_seq_len, TOKENIZER_DIR, preview_limit=500)
 
     # test
-    test_file_path = os.path.join(finetune_input_dir, "sft512", "sft512_001.jsonl")
+    test_file_path = os.path.join(finetune_input_dir, "firefly", "firefly_001.jsonl")
     test_output_bin = os.path.join(finetune_input_dir, "test", "test.bin")
-    seq = pipeline.processor.process_sft512(test_file_path)
-    pipeline.save_sequences(seq, test_output_bin)
-
-def test_preprocess():
-    test_file_path = os.path.join(finetune_input_dir, "sft512", "sft512_001.jsonl")
-    test_output_bin = os.path.join(finetune_input_dir, "test", "test.bin")
-    seq = pipeline.processor.process_sft512(test_file_path)
-    pipeline.save_sequences(seq, test_output_bin)
+    seq = pipeline.processor.process_firefly(test_file_path)
+    pipeline.save_sequences(seq, test_output_bin, mode='test')
 
 def preprocess(num_workers = 16, pretrain_sample_ratio=1.0, finetune_sample_ratio=0.1, mixed_sample_ratio=0.1):
     # 配置
@@ -323,8 +347,8 @@ def preprocess(num_workers = 16, pretrain_sample_ratio=1.0, finetune_sample_rati
     finetune_input_dir = os.path.join(METADATA_ROOT, "finetune")
     finetune_output_bin = os.path.join(DATASET_ROOT, "data_llm", "finetune.bin")
     max_seq_len = VVConfig.max_seq_len
-    effective_max_len = int(VVConfig.max_seq_len * VVConfig.rope_ntk_alpha)
-    print(f"[Preprocess] Config max_seq_len: {VVConfig.max_seq_len}, Alpha: {VVConfig.rope_ntk_alpha}")
+    effective_max_len = int(VVConfig.max_seq_len * VVConfig.rope_scale)
+    print(f"[Preprocess] Config max_seq_len: {VVConfig.max_seq_len}, Scale: {VVConfig.rope_scale}")
     print(f"[Preprocess] Using effective max length: {effective_max_len}")
     tokenizer = AutoTokenizer.from_pretrained(TOKENIZER_DIR)
     tokenizer.model_max_length = int(1e12)
@@ -350,10 +374,10 @@ def preprocess(num_workers = 16, pretrain_sample_ratio=1.0, finetune_sample_rati
         mixed_pretrain_iter = []
     # 合并生成器
     total_sequences_iter = itertools.chain(finetune_iter, mixed_pretrain_iter)
-    pipeline.save_sequences(total_sequences_iter, finetune_output_bin)
+    pipeline.save_sequences(total_sequences_iter, finetune_output_bin, mode='finetune')
 
 if __name__ == "__main__":
-    preprocess(num_workers=24,
+    preprocess(num_workers=8,
         pretrain_sample_ratio=1,
         finetune_sample_ratio=1,
         mixed_sample_ratio=0.1

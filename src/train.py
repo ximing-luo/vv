@@ -6,6 +6,15 @@ import torch
 from transformers import TrainingArguments, AutoTokenizer
 # 环境配置与安全检查绕过
 os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
+# # [调试] 开启同步模式与设备端断言，用于捕获随机出现的 CUDA 错误
+# # 注意：这会显著降低训练速度，仅建议在复现错误时开启
+# os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
+# os.environ["TORCH_USE_CUDA_DSA"] = "1"
+# [优化] 显存分配策略配置
+# expandable_segments:True -> 允许分配器创建可扩展的段，有效缓解碎片化问题，防止 Reserved 虚高
+# max_split_size_mb:128 -> 限制大块内存被切分，强制让大张量去申请新块，减少碎片
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128"
+
 try:
     # 绕过 transformers 的 torch.load 安全检查 (CVE-2025-32434)
     import transformers.utils.import_utils as import_utils
@@ -42,7 +51,7 @@ class ModelTrainer:
         
     def _init_config(self):
         if self.mode == 'pretrain':
-            self.learning_rate = 3e-4
+            self.learning_rate = 5e-4
             self.weight_decay = 0.1
         else:
             self.learning_rate = 5e-5
@@ -74,9 +83,9 @@ class ModelTrainer:
             eos_token_id=self.tokenizer.eos_token_id,
             pad_token_id=self.tokenizer.pad_token_id,
         )
-        # 如果是预训练模式 (pretrain)，强制重置 rope_ntk_alpha = 1.0
-        if self.mode == 'pretrain': self.config.rope_ntk_alpha = 1.0
-        self.model = VisualVV(self.config, freeze_llm=self.is_freeze_llm) if self.is_vlm else VV(self.config) # 初始化模型
+        # 如果是预训练模式 (pretrain)，强制重置 rope_scale = 1.0
+        if self.mode == 'pretrain': self.config.rope_scale = 1.0
+        self.model = VisualVV(self.config, freeze_llm=self.is_freeze_llm, is_load_vision_encoder=self.is_vlm)
         # 加载权重逻辑：如果有初始化权重路径，尝试加载
         if self.init_weights_path:
             print(f"正在从 {self.init_weights_path} 加载模型权重...")
@@ -104,9 +113,12 @@ class ModelTrainer:
             dataset = PretrainDataset(self.train_bin)
         val_size = min(500, int(len(dataset) * 0.01)) if len(dataset) > 500 else 1
         train_size = len(dataset) - val_size
-        self.train_dataset, self.val_dataset = torch.utils.data.random_split(
-            dataset, [train_size, val_size]
-        )
+        
+        # 优化：避免使用 random_split 产生巨大的随机索引列表 (1B 数据下会占 GB 级内存)
+        # 直接使用 range 进行切片，Sampler 内部会自动进行 shuffle
+        self.train_dataset = torch.utils.data.Subset(dataset, range(train_size))
+        self.val_dataset = torch.utils.data.Subset(dataset, range(train_size, len(dataset)))
+        
         print(f"[Data] 数据集划分完成: 训练集 {train_size} 条, 验证集 {val_size} 条")
 
     def train(self):
@@ -131,7 +143,8 @@ class ModelTrainer:
             per_device_train_batch_size=train_batch_size, # 单卡训练 Batch Size
             gradient_accumulation_steps=grad_steps, # 梯度累积步数，变相扩大 Batch Size
             weight_decay=self.weight_decay, # 权重衰减 (L2 正则化)
-            warmup_ratio=0.05, # 预热步数比例 (Warmup Ratio)，设置为总步数的 2%
+            # warmup_ratio=0.05, # 预热步数比例 (Warmup Ratio)，设置为总步数的 5%
+            warmup_steps=200, # 预热步数，设置为 200 步
             lr_scheduler_type="cosine_with_min_lr", # 学习率调度策略 (余弦退火)
             lr_scheduler_kwargs={"min_lr_rate": 0.1}, # 最小学习率比例，设置为初始学习率的 10%
             # 3. 评估配置 (Evaluation)
@@ -155,10 +168,15 @@ class ModelTrainer:
             fp16=torch.cuda.is_available() and torch.cuda.get_device_capability()[0] < 8,
             dataloader_num_workers=4, # 多进程加载数据
             dataloader_pin_memory=True, # 锁页内存，加速 CPU 到 GPU 传输
-            max_grad_norm=10.0, # 梯度裁剪，防止梯度爆炸
+            max_grad_norm=10.0, # 梯度裁剪
             disable_tqdm=False, # 强制开启进度条
         )
-        trainer = DynamicTrainer(model=self.model, args=training_args, train_dataset=self.train_dataset, eval_dataset=self.val_dataset, tokenizer=self.tokenizer)
+        trainer = DynamicTrainer(model=self.model,
+            args=training_args,
+            train_dataset=self.train_dataset,
+            eval_dataset=self.val_dataset,
+            tokenizer=self.tokenizer
+            )
         print(f"[System] 开始 {self.mode} 模式训练...")
         trainer.train(resume_from_checkpoint=self.resume_from_checkpoint)
         trainer.save_model(self.model_save_path)
@@ -176,19 +194,22 @@ class ModelTrainer:
 
     @staticmethod
     def _load_model_weights(model, path):
-        """辅助函数：手动加载模型权重"""
+        """辅助函数：手动加载模型权重，优化内存占用"""
         if not path or not os.path.exists(path): return False
         bin_path = os.path.join(path, "pytorch_model.bin")
         try:
-            state_dict = torch.load(bin_path, map_location='cpu', weights_only=True)
-            # 使用 strict=False 允许部分加载 (如 LLM -> VLM)
+            # 使用 mmap=True 实现内存映射加载，避免将整个文件读入物理内存
+            # weights_only=True 是安全加载的推荐做法
+            state_dict = torch.load(bin_path, map_location='cpu', weights_only=True, mmap=True)
+            
+            # 使用 strict=False 允许部分加载 (如从 LLM 权重初始化 VLM)
             missing, unexpected = model.load_state_dict(state_dict, strict=False)
-            print(f"[System] 成功从 {bin_path} 加载权重")
+            
+            print(f"[System] 成功从 {bin_path} 加载权重 (使用 mmap 模式)")
             if missing:
-                print(f"  [Info] 缺失权重 (将保持初始化状态): {len(missing)} 个 keys")
-                print(f"  示例: {missing[:3]} ...")
+                print(f"  [Info] 缺失权重: {len(missing)} 个 keys")
             if unexpected:
-                print(f"  [Info] 未匹配权重 (将被忽略): {len(unexpected)} 个 keys")
+                print(f"  [Info] 未匹配权重: {len(unexpected)} 个 keys")
             return True
         except Exception as e: 
             print(f"[Error] 加载权重失败: {e}")
@@ -209,7 +230,8 @@ class ModelTrainer:
                 # 场景 1 & 2: LLM 预训练
                 self.output_dir = LLM_PRETRAIN_DIR
                 self.train_bin = os.path.join(self.dataset_root, 'data_llm', 'pretrain.bin')
-                self.init_weights_path = None # LLM 预训练从头开始或从最新 checkpoint 恢复
+                # LLM 预训练从头开始或从最新 checkpoint 恢复（如果预训练没有断点且有微调，可以从微调加载权重继续训练）
+                self.init_weights_path = self._get_latest_checkpoint(LLM_FINETUNE_DIR)
             else:
                 # 场景 3 & 4: LLM 微调
                 self.output_dir = LLM_FINETUNE_DIR
@@ -235,12 +257,12 @@ class ModelTrainer:
     @staticmethod
     def _dynamic_batch_size(model_config):
         """动态计算 Batch Size 和 Gradient Accumulation Steps"""
-        # 计算最大序列长度，考虑 NTK 扩展
-        max_seq_len = int(model_config.max_seq_len * model_config.rope_ntk_alpha)
-        train_batch_size = max(1, int((2048+1024) // max_seq_len)) # 单卡最大吞吐量 2048 tokens
-        grad_steps = max(1, int(64 // train_batch_size))
-        # train_batch_size = 64
-        # grad_steps = 1
+        # 计算最大序列长度，考虑 NTK/YaRN 扩展
+        max_seq_len = int(model_config.max_seq_len * model_config.rope_scale)
+        # train_batch_size = max(1, int((2048) // max_seq_len)) # 单卡最大吞吐量 2048 tokens
+        # grad_steps = max(1, int(64 // train_batch_size))
+        train_batch_size = 4
+        grad_steps = 16
         print(f"[System] 动态计算得到的 Batch Size: {train_batch_size}")
         print(f"[System] 动态计算得到的 Gradient Accumulation Steps: {grad_steps}")
         return train_batch_size, grad_steps
@@ -258,5 +280,5 @@ def train(mode, is_vlm=False, num_train_epochs=1, eval_steps=500, save_steps=500
 
 if __name__ == "__main__":
     mode = 'pretrain' # pretrain or finetune
-    is_vlm = True # 是否是训练vlm
-    train(mode=mode, is_vlm=is_vlm, num_train_epochs=1.5, eval_steps=500, save_steps=500)
+    is_vlm = False # 是否是训练vlm
+    train(mode=mode, is_vlm=is_vlm, num_train_epochs=0.1, eval_steps=500, save_steps=500, is_freeze_llm=False)

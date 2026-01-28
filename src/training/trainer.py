@@ -6,50 +6,50 @@ from .tools.log import CustomTensorBoardCallback
 from .tools.checkpoint import CheckpointCallback
 from .tools.inference import InferenceCallback
 from .tools.rollback import RollbackCallback
+from .tools.scheduler import BatchSizeSchedulerCallback
 
 test_cases = [
     {
         'prompt': (
-            "　　阳春三月。\n"
-            "　　绵密的细雨淋湿山林，到处都是雾蒙蒙的白茫茫一片。\n"
-            "　　即便如此。\n"
-            "　　也仍然抵挡不住村中长舌妇们尽情地吐着沫子八卦着。"
+            "以下是一道小学数学题：小明有5个苹果，他想平分给他的3个朋友，每人分多少？\n"
         ),
         'mode': 'pretrain',
-        'max_new_tokens': 400,
-        'temperature': 1.3,
-        'top_k': 75
+        'max_new_tokens': 100,
+        'temperature': 0.9,
+        'top_k': 55
     },
     {
         'prompt': (
-            "贯彻落实国家和省市有关能源工作的法律、法规和政策，研究提出 如东县能源发展战略的建议，"
+            "　　方源一身残破的碧绿大袍，披头散发，浑身浴血，环顾四周。\n"
+            "　　山风吹得血袍飘荡，如战旗般嚯嚯作响。\n"
+            "　　鲜红的血液，从身上数百道伤口向外涌着。只是站着一会儿，方源脚下已经积了一大滩的血水。\n"
         ),
         'mode': 'pretrain',
-        'max_new_tokens': 200,
-        'temperature': 1.3,
-        'top_k': 75
+        'max_new_tokens': 300,
+        'temperature': 0.9,
+        'top_k': 55
     },
     {
-        'prompt': "用诗歌或散文形式，描述一个美丽的日出或日落场景。",
+        'prompt': "如果太阳不旋转，会发生什么？",
         'mode': 'chat',
         'max_new_tokens': 200,
-        'temperature': 1.3,
-        'top_k': 75 
+        'temperature': 0.9,
+        'top_k': 55
     },
     {
-        'prompt': "中国古代四大发明是什么。",
+        'prompt': "请给我写一个爱情小说的开头。",
         'mode': 'chat',
-        'max_new_tokens': 50,
-        'temperature': 1.3,
-        'top_k': 75 
+        'max_new_tokens': 100,
+        'temperature': 0.9,
+        'top_k': 55 
     },
     {
         'prompt': ("请描述这张图片。<image>"),
         'mode': 'vlm',
         'max_new_tokens': 50,
-        'temperature': 1.3,
-        'top_k': 75,
-        'image_path': r'D:\Axon\ANN\llm\vv\src\data\database\gongjy\minimind-v_dataset\eval_images\彩虹瀑布-Rainbow-Falls .jpg'
+        'temperature': 0.9,
+        'top_k': 55,
+        'image_path': r'./src/data/database/gongjy/minimind-v_dataset/eval_images/彩虹瀑布-Rainbow-Falls .jpg'
     }
 ]
 
@@ -74,7 +74,8 @@ class DynamicTrainer(Trainer):
             CheckpointCallback(),        # 检查点自动导出
             RollbackCallback(rollback_threshold=3.0), # 自动回退
             EarlyStoppingCallback(early_stopping_patience=10), # 早停
-            InferenceCallback(tokenizer=tokenizer, test_cases=test_cases) # 推理模拟
+            InferenceCallback(tokenizer=tokenizer, test_cases=test_cases), # 推理模拟
+            BatchSizeSchedulerCallback(initial_grad_steps=args.gradient_accumulation_steps, strategy="milestones") # 动态 Batch Size
         ])
         
         super().__init__(
@@ -90,8 +91,8 @@ class DynamicTrainer(Trainer):
 
     def get_train_dataloader(self):
         # 使用 TokenBucketSampler 实现固定 Token 量的动态批处理
-        # max_tokens = max_seq_len * batch_size * rope_ntk_alpha
-        max_tokens = self.model.config.max_seq_len * self.args.per_device_train_batch_size * self.model.config.rope_ntk_alpha
+        # max_tokens = max_seq_len * batch_size * rope_scale
+        max_tokens = self.model.config.max_seq_len * self.args.per_device_train_batch_size * self.model.config.rope_scale
         sampler = TokenBucketSampler(self.train_dataset, max_tokens=max_tokens)
         # 使用 DataCollatorWrapper 替代 lambda 以支持 Windows 多进程 pickling
         pad_id = self.processing_class.pad_token_id if self.processing_class else 0
@@ -105,7 +106,7 @@ class DynamicTrainer(Trainer):
     def get_eval_dataloader(self, eval_dataset=None):
         # 如果调用 evaluate() 时传入了特定数据集，则优先使用；否则使用初始化时的 eval_dataset
         eval_dataset = eval_dataset if eval_dataset is not None else self.eval_dataset
-        max_tokens = self.model.config.max_seq_len * self.args.per_device_eval_batch_size * self.model.config.rope_ntk_alpha
+        max_tokens = self.model.config.max_seq_len * self.args.per_device_eval_batch_size * self.model.config.rope_scale
         sampler = TokenBucketSampler(eval_dataset, max_tokens=max_tokens)
         pad_id = self.processing_class.pad_token_id if self.processing_class else 0
         

@@ -330,10 +330,10 @@ if __name__ == "__main__":
 
     # 执行各类采样 - 这里可以控制每个部分生成的总大小和分片大小
     # 1. WuDao 预训练采样
-    sampler.sample_wudao(target_gb=1, split_size_mb=10)
+    # sampler.sample_wudao(target_gb=1, split_size_mb=10)
 
     # 2. 小说预训练采样
-    sampler.sample_novel(target_gb=1, split_size_mb=10)
+    # sampler.sample_novel(target_gb=0.01, split_size_mb=10)
 
     # 3. Firefly SFT 采样
     # sampler.sample_firefly(target_gb=0.1, split_size_mb=2)
@@ -342,8 +342,8 @@ if __name__ == "__main__":
     # sampler.sample_chat(target_gb=0.8, split_size_mb=20)
 
     # 5. SFT 采样
-    filename = "sft_mini_512.jsonl"
-    sampler.sample_sft(filename=filename, target_gb=1, split_size_mb=10)
+    filename = "sft_512.jsonl"
+    sampler.sample_sft(filename=filename, target_gb=0.01, split_size_mb=10)
 
     # 7. Pretrain Minimind 采样
-    sampler.sample_pretrain_minimind(target_gb=1, split_size_mb=10)
+    # sampler.sample_pretrain_minimind(target_gb=0.01, split_size_mb=10)
