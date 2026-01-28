@@ -5,11 +5,11 @@ from typing import List, Optional
 class VVConfig:
     # --- 基础架构配置 ---
     vocab_size: int = None         # 词表大小 (外部指定)
-    hidden_dim: int = 512          # 隐藏层维度
+    hidden_dim: int = 576          # 隐藏层维度
     intermediate_size: int = None  # FFN 中间层维度 (None 则自动计算)
-    n_layer: int = 10              # 层数
-    n_head: int = 4                # 注意力头数
-    n_kv_head: int = 2             # KV 头数 (GQA/MLA 使用)
+    n_layer: int = 8               # 层数
+    n_head: int = 6                # 注意力头数
+    n_kv_head: int = 3             # KV 头数 (GQA/MLA 使用)
     max_seq_len: int = 512         # 原始/基础最大序列长度 (训练时的长度)
     dropout: float = 0.1           # Dropout 概率
     bias: bool = False             # 是否使用偏置
@@ -17,8 +17,8 @@ class VVConfig:
     # --- MLA (Multi-Head Latent Attention) 特有配置 ---
     kv_lora_rank: int = 128        # KV 压缩秩
     q_lora_rank: int = 96          # Query 压缩秩
-    qk_rope_head_dim: int = 64     # RoPE 部分的维度 (对应代码中的 rope_head_dim)
-    
+    qk_rope_head_dim: int = 32     # RoPE 部分的维度 (对应代码中的 rope_head_dim)
+
     # --- RoPE / YaRN 配置 ---
     rope_base: float = 10000.0     # RoPE 基数
     rope_scale: float = 1.0        # YaRN 插值/NTK 扩展倍数 (1.0 代表不扩展)

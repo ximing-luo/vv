@@ -6,6 +6,10 @@ import torch
 from transformers import TrainingArguments, AutoTokenizer
 # 环境配置与安全检查绕过
 os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
+# # [调试] 开启同步模式与设备端断言，用于捕获随机出现的 CUDA 错误
+# # 注意：这会显著降低训练速度，仅建议在复现错误时开启
+# os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
+# os.environ["TORCH_USE_CUDA_DSA"] = "1"
 # [优化] 显存分配策略配置
 # expandable_segments:True -> 允许分配器创建可扩展的段，有效缓解碎片化问题，防止 Reserved 虚高
 # max_split_size_mb:128 -> 限制大块内存被切分，强制让大张量去申请新块，减少碎片
@@ -47,7 +51,7 @@ class ModelTrainer:
         
     def _init_config(self):
         if self.mode == 'pretrain':
-            self.learning_rate = 3e-4
+            self.learning_rate = 5e-4
             self.weight_decay = 0.1
         else:
             self.learning_rate = 5e-5
@@ -139,7 +143,8 @@ class ModelTrainer:
             per_device_train_batch_size=train_batch_size, # 单卡训练 Batch Size
             gradient_accumulation_steps=grad_steps, # 梯度累积步数，变相扩大 Batch Size
             weight_decay=self.weight_decay, # 权重衰减 (L2 正则化)
-            warmup_ratio=0.05, # 预热步数比例 (Warmup Ratio)，设置为总步数的 2%
+            # warmup_ratio=0.05, # 预热步数比例 (Warmup Ratio)，设置为总步数的 5%
+            warmup_steps=200, # 预热步数，设置为 200 步
             lr_scheduler_type="cosine_with_min_lr", # 学习率调度策略 (余弦退火)
             lr_scheduler_kwargs={"min_lr_rate": 0.1}, # 最小学习率比例，设置为初始学习率的 10%
             # 3. 评估配置 (Evaluation)
