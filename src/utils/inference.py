@@ -29,7 +29,7 @@ def load_model(model_dir, device='cuda' if torch.cuda.is_available() else 'cpu')
         weights_path = os.path.join(model_dir, "pytorch_model.bin")
         state_dict = torch.load(weights_path, map_location=device)
         print(f"成功加载权重: {weights_path}")
-        model.load_state_dict(state_dict)
+        model.load_state_dict(state_dict, strict=False)
         model.to(device)
         model.eval()
         print("模型加载完成。")
@@ -96,7 +96,7 @@ def run_test_suite(model, tokenizer, device, mode, input_data, output_file, test
     运行一组推理测试，测试不同的温度和 top_k 参数
     """
     for temp_val, tk_val, step, is_temp_fixed in test_configs:
-        for i in range(1):
+        for i in range(4):
             temp = temp_val if is_temp_fixed else temp_val + i * step
             top_k = tk_val + i * step if is_temp_fixed else tk_val
             _smart_print(f"\n温度: {temp:.2f}, top_k: {int(top_k)}", output_file)
@@ -107,10 +107,10 @@ def test():
     # 1. 获取模型根目录
     checkpoints_root = os.path.join(root, "models", "checkpoints")
     test_configs = [
-        (1.3, 75, 5, True),  # 固定温度，变化 top_k
-        (1.3, 75, 0.1, False) # 固定 top_k，变化温度
+        (1.3, 45, 10, True),  # 固定温度，变化 top_k
+        (0.8, 75, 0.12, False) # 固定 top_k，变化温度
     ]
-    messages = [{"role": "user", "content": "写一篇关于人工智能对未来发展的影响的文章。"}]
+    messages = [{"role": "user", "content": "提供一个数学难题，为它提供答案和解决方法。\n求解一元二次方程x²-6x+9=0的解。"}]
     prompt = (
         "    “咔咔！”\n"
         "    剧烈地疼痛从胸口处传来，叶晨勉力睁眼看去，只见眼前的世界一片血红，耳边，除了那带着几分兴奋的低沉兽吼，还有骨骼咀嚼的声音，令人毛骨悚然。\n"
@@ -121,7 +121,7 @@ def test():
     image = ("请描述这张图片。<image>")    
     image_path = r".\src\data\database\gongjy\minimind-v_dataset\eval_images\彩虹瀑布-Rainbow-Falls .jpg"
 
-    model_path = os.path.join(os.path.dirname(checkpoints_root), "vv")
+    model_path = os.path.join(os.path.dirname(checkpoints_root), "vv-1.3")
     model, tokenizer, device = load_model(model_path)
     with open("inference_output.txt", "w", encoding="utf-8") as output_file:
         # # 2. 测试聊天模式
@@ -136,12 +136,12 @@ def test():
         max_new_tokens= 512
         )
 
-        # 4. vlm测试
-        print("\n=== 图片理解测试 ===")
-        run_test_suite(model, tokenizer, device, 'vlm', image, output_file, test_configs,
-        max_new_tokens= 200,
-        image_path=image_path
-        )
+        # # 4. vlm测试
+        # print("\n=== 图片理解测试 ===")
+        # run_test_suite(model, tokenizer, device, 'vlm', image, output_file, test_configs,
+        # max_new_tokens= 200,
+        # image_path=image_path
+        # )
 
 def main():
     print("="*30 + "\n  vv 模型推理工具\n" + "="*30)
