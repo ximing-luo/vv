@@ -10,43 +10,55 @@ from .tools.scheduler import BatchSizeSchedulerCallback
 
 test_cases = [
     {
-        'prompt': (
-            "以下是一道小学数学题：小明有5个苹果，他想平分给他的3个朋友，每人分多少？\n"
-        ),
-        'mode': 'pretrain',
+        'prompt': "如果今天是星期三，那么后天的前一天是星期几？",
+        'mode': 'chat',
         'max_new_tokens': 100,
-        'temperature': 0.9,
-        'top_k': 55
+        'temperature': 0.8,
+        'top_k': 40
     },
     {
         'prompt': (
             "　　方源一身残破的碧绿大袍，披头散发，浑身浴血，环顾四周。\n"
             "　　山风吹得血袍飘荡，如战旗般嚯嚯作响。\n"
-            "　　鲜红的血液，从身上数百道伤口向外涌着。只是站着一会儿，方源脚下已经积了一大滩的血水。\n"
+            "　　鲜红的血液，从身上数百道伤口向外涌着。\n"
         ),
         'mode': 'pretrain',
-        'max_new_tokens': 300,
-        'temperature': 0.9,
-        'top_k': 55
-    },
-    {
-        'prompt': "如果太阳不旋转，会发生什么？",
-        'mode': 'chat',
         'max_new_tokens': 200,
         'temperature': 0.9,
+        'top_k': 50
+    },
+    {
+        'prompt': "你现在是一个古代诗人，请用一首五言绝句描述春天的雨，要求风格清新。",
+        'mode': 'chat',
+        'max_new_tokens': 150,
+        'temperature': 1.0,
+        'top_k': 60
+    },
+    {
+        'prompt': "随着超空间引擎的轰鸣，巨大的星舰缓缓穿过虫洞，舷窗外，原本漆黑的宇宙被扭曲成了：",
+        'mode': 'pretrain',
+        'max_new_tokens': 250,
+        'temperature': 1.0,
         'top_k': 55
     },
     {
-        'prompt': "请给我写一个爱情小说的开头。",
+        'prompt': "为什么海水是咸的？请用三岁小孩也能听懂的话解释一下。",
         'mode': 'chat',
-        'max_new_tokens': 100,
+        'max_new_tokens': 200,
+        'temperature': 0.8,
+        'top_k': 45
+    },
+    {
+        'prompt': "在那条被夕阳染红的小巷尽头，外婆依旧坐在那把摇摇晃晃的竹椅上，手里摇着破旧的蒲扇，对我说道：",
+        'mode': 'pretrain',
+        'max_new_tokens': 200,
         'temperature': 0.9,
-        'top_k': 55 
+        'top_k': 50
     },
     {
         'prompt': ("请描述这张图片。<image>"),
         'mode': 'vlm',
-        'max_new_tokens': 50,
+        'max_new_tokens': 100,
         'temperature': 0.9,
         'top_k': 55,
         'image_path': r'./src/data/database/gongjy/minimind-v_dataset/eval_images/彩虹瀑布-Rainbow-Falls .jpg'
