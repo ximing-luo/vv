@@ -48,6 +48,7 @@ class ModelTrainer:
         self.num_train_epochs = 1
         self.eval_steps = 500
         self.save_steps = 500
+        self.use_torch_compile = False
         
     def _init_config(self):
         if self.mode == 'pretrain':
@@ -170,6 +171,8 @@ class ModelTrainer:
             dataloader_pin_memory=True, # 锁页内存，加速 CPU 到 GPU 传输
             max_grad_norm=10.0, # 梯度裁剪
             disable_tqdm=False, # 强制开启进度条
+            torch_compile=self.use_torch_compile,
+            torch_compile_mode="max-autotune",
         )
         trainer = DynamicTrainer(model=self.model,
             args=training_args,
@@ -267,7 +270,7 @@ class ModelTrainer:
         print(f"[System] 动态计算得到的 Gradient Accumulation Steps: {grad_steps}")
         return train_batch_size, grad_steps
 
-def train(mode, is_vlm=False, num_train_epochs=1, eval_steps=500, save_steps=500, is_freeze_llm=True):
+def train(mode, is_vlm=False, num_train_epochs=1, eval_steps=500, save_steps=500, is_freeze_llm=True, use_torch_compile=False):
     """
     保持向后兼容的 train 函数入口
     """
@@ -276,9 +279,10 @@ def train(mode, is_vlm=False, num_train_epochs=1, eval_steps=500, save_steps=500
     trainer.eval_steps = eval_steps
     trainer.save_steps = save_steps
     trainer.is_freeze_llm = is_freeze_llm
+    trainer.use_torch_compile = use_torch_compile
     trainer.train()
 
 if __name__ == "__main__":
     mode = 'pretrain' # pretrain or finetune
     is_vlm = False # 是否是训练vlm
-    train(mode=mode, is_vlm=is_vlm, num_train_epochs=0.1, eval_steps=500, save_steps=500, is_freeze_llm=False)
+    train(mode=mode, is_vlm=is_vlm, num_train_epochs=0.1, eval_steps=500, save_steps=500, is_freeze_llm=False, use_torch_compile=False)
