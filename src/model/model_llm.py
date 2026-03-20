@@ -5,14 +5,14 @@ from .backbone.transform import StandardBlock, DeepSeekV3Block
 
 class BaseModel(nn.Module):
     """
-    基础语言模型架构 (Evolutionary Base)
+    基础语言模型架构
     定义通用的 Causal Transformer 流程: Embedding -> Blocks -> Norm -> Head
     """
-    def __init__(self, config, block_cls=StandardBlock):
+    def __init__(self, config, block_cls=DeepSeekV3Block):
         super().__init__()
         self.config = config
         self.token_embedding_table = nn.Embedding(config.vocab_size, config.hidden_dim)
-        # 演进式架构：支持注入不同等级的 Block
+        # 支持注入不同等级的 Block
         self.blocks = nn.Sequential(*[block_cls(config) for _ in range(config.n_layer)])
         self.norm = nn.RMSNorm(config.hidden_dim)
         self.lm_head = nn.Linear(config.hidden_dim, config.vocab_size, bias=False)

@@ -62,7 +62,7 @@ class FlashAttention(nn.Module):
             dropout_p=self.dropout if self.training else 0,
             is_causal=True
         )
-        return self.att_dropout(self.c_proj(y.transpose(1, 2).contiguous().view(B, T, C)))
+        return self.att_dropout(self.c_proj(y.transpose(1, 2).reshape(B, T, C)))
 
 class GroupedQueryAttention(nn.Module):
     """
@@ -102,20 +102,19 @@ class GroupedQueryAttention(nn.Module):
         q, k = apply_rotary_pos_emb(q, k, cos, sin, position_ids=position_ids)
 
         if self.n_kv_head != self.n_head:
-            # 修复：k, v shape 为 (B, n_kv_head, T, head_size)
-            # repeat_interleave 是最稳的，expand 必须配合 reshape 才能正确广播
             k = k.repeat_interleave(self.n_head // self.n_kv_head, dim=1)
             v = v.repeat_interleave(self.n_head // self.n_kv_head, dim=1)
 
         y = F.scaled_dot_product_attention(
-            q.contiguous(), k.contiguous(), v.contiguous(),
-            attn_mask=None, dropout_p=self.dropout if self.training else 0, is_causal=True
+            q, k, v, attn_mask=None,
+            dropout_p=self.dropout if self.training else 0,
+            is_causal=True
         )
-        return self.att_dropout(self.c_proj(y.transpose(1, 2).contiguous().view(B, T, C)))
+        return self.att_dropout(self.c_proj(y.transpose(1, 2).reshape(B, T, C)))
 
 class LatentAttention(nn.Module):
     """
-    [演进阶段 5] MLA (Multi-Head Latent Attention)
+    MLA (Multi-Head Latent Attention)
     DeepSeek-V2/V3 核心架构，通过低秩压缩 (Low-Rank Compression) 大幅降低 KV Cache 显存
     优化: 增加 k_pe_norm 以增强位置编码稳定性，解耦内容与位置计算
     """
@@ -135,8 +134,8 @@ class LatentAttention(nn.Module):
         # Query Compression: x -> c_Q -> [q_nop, q_pe]
         self.q_down_proj = nn.Linear(config.hidden_dim, self.q_lora_rank, bias=config.bias)
         self.q_norm = nn.RMSNorm(self.q_lora_rank)
-        self.q_up_proj = nn.Linear(self.q_lora_rank, self.n_head * self.q_head_dim, bias=config.bias)
-        self.q_pe_proj = nn.Linear(self.q_lora_rank, self.n_head * self.rope_head_dim, bias=config.bias)
+        # [优化] 合并 q_up_proj 和 q_pe_proj 为一个 Gemm，消除 torch.cat 带来的拷贝
+        self.q_up_pe_proj = nn.Linear(self.q_lora_rank, self.n_head * (self.q_head_dim + self.rope_head_dim), bias=config.bias)
         
         # KV Compression: x -> c_KV -> [k_nop, v] + k_pe
         self.kv_down_proj = nn.Linear(config.hidden_dim, self.kv_lora_rank, bias=config.bias)
@@ -170,8 +169,9 @@ class LatentAttention(nn.Module):
         
         # 1. Query Generation
         c_Q = self.q_norm(self.q_down_proj(x))
-        q_nop = self.q_up_proj(c_Q).view(B, T, self.n_head, self.q_head_dim)
-        q_pe = self.q_pe_proj(c_Q).view(B, T, self.n_head, self.rope_head_dim)
+        # [优化] 一次性完成投影并通过 view 自动完成 nop/pe 的逻辑拆分
+        q_up_pe = self.q_up_pe_proj(c_Q).view(B, T, self.n_head, self.q_head_dim + self.rope_head_dim)
+        q_nop, q_pe = q_up_pe.split([self.q_head_dim, self.rope_head_dim], dim=-1)
         
         # 2. KV Generation
         c_KV = self.kv_norm(self.kv_down_proj(x))
@@ -205,13 +205,15 @@ class LatentAttention(nn.Module):
         
         # 4. Attention Calculation
         # 拼接 content 和 pe 部分
+        # [优化] torch.cat 会产生一块新的连续内存，后续无需再调用 contiguous()
         q = torch.cat([q_nop, q_pe], dim=-1)
         k = torch.cat([k_nop, k_pe], dim=-1)
         
         y = F.scaled_dot_product_attention(
-            q.contiguous(), k.contiguous(), v.contiguous(),
-            attn_mask=None, dropout_p=self.dropout if self.training else 0, is_causal=True,
+            q, k, v, attn_mask=None,
+            dropout_p=self.dropout if self.training else 0,
+            is_causal=True,
             scale=self.softmax_scale
         )
         
-        return self.att_dropout(self.c_proj(y.transpose(1, 2).contiguous().view(B, T, self.n_head * self.kv_head_dim)))
+        return self.att_dropout(self.c_proj(y.transpose(1, 2).reshape(B, T, self.n_head * self.kv_head_dim)))

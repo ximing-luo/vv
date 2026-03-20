@@ -4,7 +4,7 @@ from .moe import FeedForward, HybridMoE, SoftBalancedMoE, SelfAdaptiveMoE
 
 class StandardBlock(nn.Module):
     """
-    [演进阶段 1] 标准 Transformer Block
+    标准 Transformer Block
     结构: Pre-Norm -> MHA -> Residual -> Pre-Norm -> FFN -> Residual
     """
     def __init__(self, config):
@@ -21,7 +21,7 @@ class StandardBlock(nn.Module):
 
 class AdvancedBlock(nn.Module):
     """
-    [演进阶段 2] 进阶 Block (Llama Style)
+    进阶 Block (Llama Style)
     改进: RMSNorm + GQA + HybridMoE (可选)
     """
     def __init__(self, config):
@@ -40,7 +40,7 @@ class AdvancedBlock(nn.Module):
 
 class DeepSeekV2Block(nn.Module):
     """
-    [演进阶段 3] DeepSeek-V2 Block
+    DeepSeek-V2 Block
     改进: MLA (Latent Attention) + SoftBalancedMoE (Aux Loss)
     [注意] 此处返回了辅助损失 (aux_loss)，但在 BaseModel 的 Sequential 遍历中会被丢失
     若使用该 Block，需在 model_llm.py 的 forward 循环中适配元组解包，否则会导致类型错误
@@ -60,7 +60,7 @@ class DeepSeekV2Block(nn.Module):
 
 class DeepSeekV3Block(nn.Module):
     """
-    [演进阶段 4] DeepSeek-V3 Block
+    DeepSeek-V3 Block
     改进: MLA + SelfAdaptiveMoE (无损负载均衡)
     """
     def __init__(self, config):
