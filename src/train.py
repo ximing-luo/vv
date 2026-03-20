@@ -181,9 +181,14 @@ class ModelTrainer:
             tokenizer=self.tokenizer
             )
         print(f"[System] 开始 {self.mode} 模式训练...")
-        trainer.train(resume_from_checkpoint=self.resume_from_checkpoint)
-        trainer.save_model(self.model_save_path)
-        print(f"[System] 训练完成，模型已保存至 {self.model_save_path}")
+        try:
+            trainer.train(resume_from_checkpoint=self.resume_from_checkpoint)
+        except Exception as e:
+            print(f"[Error] 训练过程中出现问题: {e}")
+            raise e
+        finally:
+            trainer.save_model(self.model_save_path)
+            print(f"[System] 训练完成，模型已保存至 {self.model_save_path}")
 
     @staticmethod
     def _get_latest_checkpoint(path):
@@ -262,10 +267,10 @@ class ModelTrainer:
         """动态计算 Batch Size 和 Gradient Accumulation Steps"""
         # 计算最大序列长度，考虑 NTK/YaRN 扩展
         max_seq_len = int(model_config.max_seq_len * model_config.rope_scale)
-        # train_batch_size = max(1, int((2048) // max_seq_len)) # 单卡最大吞吐量 2048 tokens
-        # grad_steps = max(1, int(64 // train_batch_size))
-        train_batch_size = 4
-        grad_steps = 16
+        train_batch_size = max(1, int((1024+512) // max_seq_len)) # 单卡最大吞吐量 2048 tokens
+        grad_steps = max(1, int(64 // train_batch_size))
+        # train_batch_size = 4
+        # grad_steps = 16
         print(f"[System] 动态计算得到的 Batch Size: {train_batch_size}")
         print(f"[System] 动态计算得到的 Gradient Accumulation Steps: {grad_steps}")
         return train_batch_size, grad_steps

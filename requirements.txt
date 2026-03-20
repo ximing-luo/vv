@@ -1,8 +1,8 @@
-torch>=2.6.0
-transformers>=4.57.0      # 提供模型架构和训练工具
-datasets>=4.4.0           # 用于高效加载和处理数据集
-accelerate>=1.12.0        # 分布式训练和混合精度加速
-tokenizers>=0.22.0        # 快速分词器
-numpy>=2.2.0              # 基础数值计算
-tqdm>=4.67.0              # 进度条显示
-tensorboard>=2.20.0       # 训练过程可视化
+# torch==2.7.1            # 手动安装
+transformers==4.57.0      # 提供模型架构和训练工具
+datasets==4.4.0           # 用于高效加载和处理数据集
+accelerate==1.12.0        # 分布式训练和混合精度加速
+tokenizers==0.22.0        # 快速分词器
+numpy==2.2.0              # 基础数值计算
+tqdm==4.67.0              # 进度条显示
+tensorboard==2.20.0       # 训练过程可视化

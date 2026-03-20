@@ -41,7 +41,7 @@ def sample():
     sampler.sample_novel(target_gb=0.5, split_size_mb=20)
     sampler.sample_pretrain_minimind(target_gb=1.5, split_size_mb=20)
 
-    sampler.sample_sft(target_gb=7, split_size_mb=20)
+    sampler.sample_sft(filename="sft_mini_512.jsonl", target_gb=7, split_size_mb=20)
     sampler.sample_firefly(target_gb=1, split_size_mb=20)
     sampler.sample_chat(target_gb=1, split_size_mb=20)
 
@@ -88,7 +88,7 @@ if __name__ == "__main__":
     #     )
     # preprocess_vlm(num_workers=8)
 
-    train(mode='pretrain', is_vlm=False, num_train_epochs=1, eval_steps=500, save_steps=500, is_freeze_llm= False)
-    train(mode='finetune', is_vlm=False, num_train_epochs=1, eval_steps=500, save_steps=500, is_freeze_llm= False)
-    train(mode='pretrain', is_vlm=True, num_train_epochs=1, eval_steps=500, save_steps=500)
-    train(mode='finetune', is_vlm=True, num_train_epochs=1, eval_steps=500, save_steps=500)
+    # train(mode='pretrain', is_vlm=False, num_train_epochs=0.1, eval_steps=500, save_steps=500, is_freeze_llm= False)
+    # train(mode='finetune', is_vlm=False, num_train_epochs=0.1, eval_steps=500, save_steps=500, is_freeze_llm= False)
+    train(mode='pretrain', is_vlm=True, num_train_epochs=0.1, eval_steps=500, save_steps=500)
+    train(mode='finetune', is_vlm=True, num_train_epochs=0.1, eval_steps=500, save_steps=500)

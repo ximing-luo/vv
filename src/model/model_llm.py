@@ -97,6 +97,9 @@ class VV(BaseModel):
     VV (DeepSeekV3-based) 实现
     继承自 BaseModel，指定使用 DeepSeekV3Block 构建深度模型
     """
+    _keys_to_ignore_on_save = None
+    _keys_to_ignore_on_load_unexpected = None
+
     def __init__(self, config):
         super().__init__(config, block_cls=DeepSeekV3Block)
         self.apply(self._init_weights)
