@@ -3,7 +3,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from src.model.backbone.rope import NTKRotaryEmbedding, YaRNRotaryEmbedding, apply_rotary_pos_emb
-from src.model.backbone.rms import RMSNorm
 
 class SingleHeadAttention(nn.Module):
     # [基础] 单头注意力机制
@@ -135,18 +134,18 @@ class LatentAttention(nn.Module):
         
         # Query Compression: x -> c_Q -> [q_nop, q_pe]
         self.q_down_proj = nn.Linear(config.hidden_dim, self.q_lora_rank, bias=config.bias)
-        self.q_norm = RMSNorm(self.q_lora_rank)
+        self.q_norm = nn.RMSNorm(self.q_lora_rank)
         self.q_up_proj = nn.Linear(self.q_lora_rank, self.n_head * self.q_head_dim, bias=config.bias)
         self.q_pe_proj = nn.Linear(self.q_lora_rank, self.n_head * self.rope_head_dim, bias=config.bias)
         
         # KV Compression: x -> c_KV -> [k_nop, v] + k_pe
         self.kv_down_proj = nn.Linear(config.hidden_dim, self.kv_lora_rank, bias=config.bias)
-        self.kv_norm = RMSNorm(self.kv_lora_rank)
+        self.kv_norm = nn.RMSNorm(self.kv_lora_rank)
         self.kv_up_proj = nn.Linear(self.kv_lora_rank, self.n_kv_head * (self.kv_head_dim + self.kv_head_dim), bias=config.bias)
         
         # Decoupled RoPE Key: k_pe 直接从 x 投影并归一化
         self.k_pe_proj = nn.Linear(config.hidden_dim, self.rope_head_dim, bias=config.bias)
-        self.k_pe_norm = RMSNorm(self.rope_head_dim) # [优化] 增加 Norm
+        self.k_pe_norm = nn.RMSNorm(self.rope_head_dim) # [优化] 增加 Norm
 
         # [优化] 使用 YaRNRotaryEmbedding 替换旧的 NTKAwareRotaryEmbedding
         # 默认 scale=1.0 退化为标准 RoPE，如果 config.rope_scaling_type == 'yarn' 则启用

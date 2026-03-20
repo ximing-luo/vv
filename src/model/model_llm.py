@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from .backbone.transform import StandardBlock, DeepSeekV3Block
-from .backbone.rms import RMSNorm
 
 class BaseModel(nn.Module):
     """
@@ -15,7 +14,7 @@ class BaseModel(nn.Module):
         self.token_embedding_table = nn.Embedding(config.vocab_size, config.hidden_dim)
         # 演进式架构：支持注入不同等级的 Block
         self.blocks = nn.Sequential(*[block_cls(config) for _ in range(config.n_layer)])
-        self.norm = RMSNorm(config.hidden_dim)
+        self.norm = nn.RMSNorm(config.hidden_dim)
         self.lm_head = nn.Linear(config.hidden_dim, config.vocab_size, bias=False)
         self.lm_head.weight = self.token_embedding_table.weight # Weight Tying
         

@@ -1,6 +1,5 @@
 import torch.nn as nn
 from .attention import MultiHeadAttention, GroupedQueryAttention, LatentAttention
-from .rms import RMSNorm
 from .moe import FeedForward, HybridMoE, SoftBalancedMoE, SelfAdaptiveMoE
 
 class StandardBlock(nn.Module):
@@ -27,9 +26,9 @@ class AdvancedBlock(nn.Module):
     """
     def __init__(self, config):
         super().__init__()
-        self.norm1 = RMSNorm(config.hidden_dim)
+        self.norm1 = nn.RMSNorm(config.hidden_dim)
         self.attn = GroupedQueryAttention(config)
-        self.norm2 = RMSNorm(config.hidden_dim)
+        self.norm2 = nn.RMSNorm(config.hidden_dim)
         # 默认使用 HybridMoE，如果 config 指定了 MoE 参数
         self.mlp = HybridMoE(config) if config.num_experts > 1 else FeedForward(config)
 
@@ -48,9 +47,9 @@ class DeepSeekV2Block(nn.Module):
     """
     def __init__(self, config):
         super().__init__()
-        self.norm1 = RMSNorm(config.hidden_dim)
+        self.norm1 = nn.RMSNorm(config.hidden_dim)
         self.attn = LatentAttention(config)
-        self.norm2 = RMSNorm(config.hidden_dim)
+        self.norm2 = nn.RMSNorm(config.hidden_dim)
         self.mlp = SoftBalancedMoE(config)
 
     def forward(self, x, position_ids=None):
@@ -66,9 +65,9 @@ class DeepSeekV3Block(nn.Module):
     """
     def __init__(self, config):
         super().__init__()
-        self.norm1 = RMSNorm(config.hidden_dim)
+        self.norm1 = nn.RMSNorm(config.hidden_dim)
         self.attn = LatentAttention(config)
-        self.norm2 = RMSNorm(config.hidden_dim)
+        self.norm2 = nn.RMSNorm(config.hidden_dim)
         self.mlp = SelfAdaptiveMoE(config)
 
     def forward(self, x, position_ids=None):
