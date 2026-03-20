@@ -28,10 +28,10 @@ class GatedMLP(nn.Module):
         if intermediate_size is None:
             intermediate_size = int(config.hidden_dim * 8 / 3)
             intermediate_size = 64 * ((intermediate_size + 64 - 1) // 64)
-        self.dropout = nn.Dropout(config.dropout)
+        self.dropout = nn.Dropout(config.dropout, inplace=True)
         self.up_proj = nn.Linear(config.hidden_dim, intermediate_size, bias=config.bias)
-        self.down_c_proj = nn.Linear(intermediate_size, config.hidden_dim, bias=config.bias)
         self.gate = nn.Linear(config.hidden_dim, intermediate_size, bias=config.bias)
+        self.down_c_proj = nn.Linear(intermediate_size, config.hidden_dim, bias=config.bias)
         self.act_func = F.silu
 
     def forward(self, x):
@@ -249,8 +249,11 @@ class SelfAdaptiveMoE(HybridMoE):
         if self.training:
             self.update_biases(indices)
             
-        final_output = (shared_output + routed_output).view(*orig_shape)
-        return final_output
+        # 原地加法优化 (In-place Addition)
+        # 此时 shared_output 已经包含 Recompute 结果，直接加到 routed_output 上
+        routed_output.add_(shared_output)
+            
+        return routed_output.view(*orig_shape)
 
     @torch.no_grad()
     def update_biases(self, indices):

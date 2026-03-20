@@ -53,13 +53,12 @@ class FlashAttention(nn.Module):
     def forward(self, x):
         B, T, C = x.shape
         q, k, v = self.qkv_atten(x).split(self.hidden_dim, dim=2)
-        q = q.view(B, T, self.n_head, self.head_size).transpose(1, 2)
-        k = k.view(B, T, self.n_head, self.head_size).transpose(1, 2)
-        v = v.view(B, T, self.n_head, self.head_size).transpose(1, 2)
+        q = q.view(B, T, self.n_head, self.head_size).transpose(1, 2).contiguous()
+        k = k.view(B, T, self.n_head, self.head_size).transpose(1, 2).contiguous()
+        v = v.view(B, T, self.n_head, self.head_size).transpose(1, 2).contiguous()
         
         y = F.scaled_dot_product_attention(
             q, k, v, attn_mask=None,
-            dropout_p=self.dropout if self.training else 0,
             is_causal=True
         )
         return self.att_dropout(self.c_proj(y.transpose(1, 2).reshape(B, T, C)))
@@ -90,12 +89,12 @@ class GroupedQueryAttention(nn.Module):
 
     def forward(self, x, position_ids=None):
         B, T, C = x.shape
-        qkv = self.qkv_proj(x)
-        q, k, v = qkv.split([self.n_head * self.head_size, self.n_kv_head * self.head_size, self.n_kv_head * self.head_size], dim=-1)
+        # 链式调用避免保留中间大变量 qkv 的引用，有助于显存回收
+        q, k, v = self.qkv_proj(x).split([self.n_head * self.head_size, self.n_kv_head * self.head_size, self.n_kv_head * self.head_size], dim=-1)
         
         q = q.view(B, T, self.n_head, self.head_size).transpose(1, 2)
         k = k.view(B, T, self.n_kv_head, self.head_size).transpose(1, 2)
-        v = v.view(B, T, self.n_kv_head, self.head_size).transpose(1, 2)
+        v = v.view(B, T, self.n_kv_head, self.head_size).transpose(1, 2).contiguous()
 
         cos, sin = self.rotary_emb(v, seq_len=T)
         # 支持传入 position_ids
@@ -107,7 +106,6 @@ class GroupedQueryAttention(nn.Module):
 
         y = F.scaled_dot_product_attention(
             q, k, v, attn_mask=None,
-            dropout_p=self.dropout if self.training else 0,
             is_causal=True
         )
         return self.att_dropout(self.c_proj(y.transpose(1, 2).reshape(B, T, C)))
@@ -156,7 +154,7 @@ class LatentAttention(nn.Module):
             original_max_position_embeddings=config.max_seq_len
         )
         self.dropout = config.dropout # 修复: 初始化 dropout 参数
-        self.att_dropout = nn.Dropout(config.dropout) 
+        self.att_dropout = nn.Dropout(config.dropout, inplace=True) 
         self.c_proj = nn.Linear(self.n_head * self.kv_head_dim, config.hidden_dim, bias=config.bias)
         
         # 缩放因子: 用于平衡内容(nop)和位置(pe)
@@ -195,7 +193,7 @@ class LatentAttention(nn.Module):
         # Transpose to (B, H, T, D)
         q_nop, q_pe = q_nop.transpose(1, 2), q_pe.transpose(1, 2)
         k_nop, k_pe = k_nop.transpose(1, 2), k_pe.transpose(1, 2) # k_pe: (B, 1, T, D)
-        v = v.transpose(1, 2)
+        v = v.transpose(1, 2).contiguous()
         
         cos, sin = self.rotary_emb(v, seq_len=T)
         q_pe, k_pe = apply_rotary_pos_emb(q_pe, k_pe, cos, sin, position_ids=position_ids)
@@ -211,7 +209,6 @@ class LatentAttention(nn.Module):
         
         y = F.scaled_dot_product_attention(
             q, k, v, attn_mask=None,
-            dropout_p=self.dropout if self.training else 0,
             is_causal=True,
             scale=self.softmax_scale
         )
