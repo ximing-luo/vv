@@ -78,15 +78,15 @@ def train_from_scratch():
 
 
 if __name__ == "__main__":
-    # delete_data(paths_to_delete) # 如果需要清空数据，取消此行注释
-    # sample()
-    # train_token()
-    # preprocess(num_workers=8,
-    #     pretrain_sample_ratio=1,
-    #     mixed_sample_ratio=0.1,
-    #     finetune_sample_ratio=1
-    #     )
-    # preprocess_vlm(num_workers=8)
+    delete_data(paths_to_delete) # 如果需要清空数据，取消此行注释
+    sample()
+    train_token()
+    preprocess(num_workers=8,
+        pretrain_sample_ratio=1,
+        mixed_sample_ratio=0.1,
+        finetune_sample_ratio=1
+        )
+    preprocess_vlm(num_workers=8)
 
     train(mode='pretrain', is_vlm=False, num_train_epochs=1, eval_steps=500, save_steps=500, is_freeze_llm= False)
     train(mode='finetune', is_vlm=False, num_train_epochs=1, eval_steps=500, save_steps=500, is_freeze_llm= False)
