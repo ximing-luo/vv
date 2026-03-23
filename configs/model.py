@@ -7,7 +7,7 @@ class VVConfig:
     vocab_size: int = None         # 词表大小 (外部指定)
     hidden_dim: int = 576          # 隐藏层维度
     intermediate_size: int = None  # FFN 中间层维度 (None 则自动计算)
-    n_layer: int = 8               # 层数
+    n_layer: int = 12               # 层数
     n_head: int = 6                # 注意力头数
     n_kv_head: int = 3             # KV 头数 (GQA/MLA 使用)
     max_seq_len: int = 512         # 原始/基础最大序列长度 (训练时的长度)
@@ -30,6 +30,9 @@ class VVConfig:
     router_aux_loss_coef: float = 0.01 # 辅助损失系数
     bias_update_rate: float = 0.001 # DeepSeek-V3 动态偏置更新率
 
+    # --- 训练/推理加速与显存优化 ---
+    use_checkpoint: bool = True   # 是否开启梯度检查点 (Activation Checkpointing)
+    
     # --- 特殊 Token ID (适配 Transformers 接口) ---
     bos_token_id: Optional[int] = None
     eos_token_id: Optional[int] = None

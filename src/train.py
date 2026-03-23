@@ -84,6 +84,9 @@ class ModelTrainer:
             eos_token_id=self.tokenizer.eos_token_id,
             pad_token_id=self.tokenizer.pad_token_id,
         )
+        # 注入用户配置的加速开关
+        # self.config.use_checkpoint = True 
+
         # 如果是预训练模式 (pretrain)，强制重置 rope_scale = 1.0
         if self.mode == 'pretrain': self.config.rope_scale = 1.0
         self.model = VisualVV(self.config, freeze_llm=self.is_freeze_llm, is_load_vision_encoder=self.is_vlm)
@@ -137,6 +140,7 @@ class ModelTrainer:
             report_to="none", # 报告目标（如 wandb），这里关闭
             # 2. 训练超参数 (Hyperparameters)
             learning_rate=self.learning_rate, # 初始学习率
+            optim="adamw_bnb_8bit",
             adam_beta1=0.9, # AdamW 优化器的动量参数 (一阶矩估计的指数衰减率)
             adam_beta2=0.95, # AdamW 优化器的二阶矩估计衰减率 (有时调小能加速收敛)
             adam_epsilon=1e-8, # 防止除以零的小数值
@@ -266,11 +270,11 @@ class ModelTrainer:
     def _dynamic_batch_size(model_config):
         """动态计算 Batch Size 和 Gradient Accumulation Steps"""
         # 计算最大序列长度，考虑 NTK/YaRN 扩展
-        max_seq_len = int(model_config.max_seq_len * model_config.rope_scale)
-        train_batch_size = max(1, int((1024+512) // max_seq_len)) # 单卡最大吞吐量 2048 tokens
-        grad_steps = max(1, int(64 // train_batch_size))
-        # train_batch_size = 4
-        # grad_steps = 16
+        # max_seq_len = int(model_config.max_seq_len * model_config.rope_scale)
+        # train_batch_size = max(1, int((1024+512) // max_seq_len)) # 单卡最大吞吐量 2048 tokens
+        # grad_steps = max(1, int(64 // train_batch_size))
+        train_batch_size = 4
+        grad_steps = 16
         print(f"[System] 动态计算得到的 Batch Size: {train_batch_size}")
         print(f"[System] 动态计算得到的 Gradient Accumulation Steps: {grad_steps}")
         return train_batch_size, grad_steps
