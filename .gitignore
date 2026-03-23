@@ -3,8 +3,8 @@ __pycache__/
 .trae
 logs
 models
-src/data/dataset
 src/data/database
+src/data/dataset
 src/data/metadata
 tests
 log.md

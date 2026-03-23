@@ -48,6 +48,7 @@ class ModelTrainer:
         self.num_train_epochs = 1
         self.eval_steps = 500
         self.save_steps = 500
+        self.use_torch_compile = False
         
     def _init_config(self):
         if self.mode == 'pretrain':
@@ -83,6 +84,9 @@ class ModelTrainer:
             eos_token_id=self.tokenizer.eos_token_id,
             pad_token_id=self.tokenizer.pad_token_id,
         )
+        # 注入用户配置的加速开关
+        # self.config.use_checkpoint = True 
+
         # 如果是预训练模式 (pretrain)，强制重置 rope_scale = 1.0
         if self.mode == 'pretrain': self.config.rope_scale = 1.0
         self.model = VisualVV(self.config, freeze_llm=self.is_freeze_llm, is_load_vision_encoder=self.is_vlm)
@@ -136,6 +140,7 @@ class ModelTrainer:
             report_to="none", # 报告目标（如 wandb），这里关闭
             # 2. 训练超参数 (Hyperparameters)
             learning_rate=self.learning_rate, # 初始学习率
+            optim="adamw_bnb_8bit",
             adam_beta1=0.9, # AdamW 优化器的动量参数 (一阶矩估计的指数衰减率)
             adam_beta2=0.95, # AdamW 优化器的二阶矩估计衰减率 (有时调小能加速收敛)
             adam_epsilon=1e-8, # 防止除以零的小数值
@@ -170,6 +175,8 @@ class ModelTrainer:
             dataloader_pin_memory=True, # 锁页内存，加速 CPU 到 GPU 传输
             max_grad_norm=10.0, # 梯度裁剪
             disable_tqdm=False, # 强制开启进度条
+            # torch_compile=self.use_torch_compile,
+            # torch_compile_mode="max-autotune",
         )
         trainer = DynamicTrainer(model=self.model,
             args=training_args,
@@ -178,9 +185,14 @@ class ModelTrainer:
             tokenizer=self.tokenizer
             )
         print(f"[System] 开始 {self.mode} 模式训练...")
-        trainer.train(resume_from_checkpoint=self.resume_from_checkpoint)
-        trainer.save_model(self.model_save_path)
-        print(f"[System] 训练完成，模型已保存至 {self.model_save_path}")
+        try:
+            trainer.train(resume_from_checkpoint=self.resume_from_checkpoint)
+        except Exception as e:
+            print(f"[Error] 训练过程中出现问题: {e}")
+            raise e
+        finally:
+            trainer.save_model(self.model_save_path)
+            print(f"[System] 训练完成，模型已保存至 {self.model_save_path}")
 
     @staticmethod
     def _get_latest_checkpoint(path):
@@ -258,8 +270,8 @@ class ModelTrainer:
     def _dynamic_batch_size(model_config):
         """动态计算 Batch Size 和 Gradient Accumulation Steps"""
         # 计算最大序列长度，考虑 NTK/YaRN 扩展
-        max_seq_len = int(model_config.max_seq_len * model_config.rope_scale)
-        # train_batch_size = max(1, int((2048) // max_seq_len)) # 单卡最大吞吐量 2048 tokens
+        # max_seq_len = int(model_config.max_seq_len * model_config.rope_scale)
+        # train_batch_size = max(1, int((1024+512) // max_seq_len)) # 单卡最大吞吐量 2048 tokens
         # grad_steps = max(1, int(64 // train_batch_size))
         train_batch_size = 4
         grad_steps = 16
@@ -267,7 +279,7 @@ class ModelTrainer:
         print(f"[System] 动态计算得到的 Gradient Accumulation Steps: {grad_steps}")
         return train_batch_size, grad_steps
 
-def train(mode, is_vlm=False, num_train_epochs=1, eval_steps=500, save_steps=500, is_freeze_llm=True):
+def train(mode, is_vlm=False, num_train_epochs=1, eval_steps=500, save_steps=500, is_freeze_llm=True, use_torch_compile=False):
     """
     保持向后兼容的 train 函数入口
     """
@@ -276,9 +288,10 @@ def train(mode, is_vlm=False, num_train_epochs=1, eval_steps=500, save_steps=500
     trainer.eval_steps = eval_steps
     trainer.save_steps = save_steps
     trainer.is_freeze_llm = is_freeze_llm
+    trainer.use_torch_compile = False
     trainer.train()
 
 if __name__ == "__main__":
     mode = 'pretrain' # pretrain or finetune
     is_vlm = False # 是否是训练vlm
-    train(mode=mode, is_vlm=is_vlm, num_train_epochs=0.1, eval_steps=500, save_steps=500, is_freeze_llm=False)
+    train(mode=mode, is_vlm=is_vlm, num_train_epochs=0.1, eval_steps=500, save_steps=500, is_freeze_llm=False, use_torch_compile=False)

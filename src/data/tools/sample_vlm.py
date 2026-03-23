@@ -1,6 +1,7 @@
 import os
 import json
 import random
+import numpy as np
 import pandas as pd
 from tqdm import tqdm
 from PIL import Image
@@ -109,9 +110,25 @@ class VLMSampler:
                     # 提前判断总大小是否达标（估算）
                     if manager.total_written_bytes >= target_bytes:
                         break
-                    
+
                     if random.random() < sampling_prob:
-                        manager.add(row.to_dict())
+                        row_dict = row.to_dict()
+                        # 验证图像是否有效，跳过损坏的图像
+                        image_bytes = row_dict.get('image_bytes')
+                        if image_bytes is not None:
+                            # 处理 Parquet 读取时可能的 numpy.ndarray 类型
+                            if isinstance(image_bytes, np.ndarray):
+                                if image_bytes.dtype == object and len(image_bytes) > 0:
+                                    image_bytes = image_bytes[0]  # 提取数组中的 bytes 对象
+                                else:
+                                    image_bytes = image_bytes.tobytes()  # 转换为 bytes
+                            
+                            try:
+                                with Image.open(io.BytesIO(image_bytes)) as img:
+                                    img.verify()
+                            except Exception:
+                                continue  # 跳过损坏的图像
+                        manager.add(row_dict)
                 
                 if manager.total_written_bytes >= target_bytes:
                     break
@@ -158,6 +175,28 @@ class VLMSampler:
                 image_bytes = row.get('image_bytes')
                 if image_bytes:
                     try:
+                        # 处理 Parquet 读取时可能的 numpy.ndarray 类型
+                        if isinstance(image_bytes, np.ndarray):
+                            if image_bytes.size == 0:
+                                print(f"  警告: 图像 {i} 的 numpy 数组为空")
+                                continue
+                            if image_bytes.dtype == object and len(image_bytes) > 0:
+                                image_bytes = image_bytes[0]  # 提取数组中的 bytes 对象
+                            else:
+                                image_bytes = image_bytes.tobytes()  # 转换为 bytes
+
+                        # 确保 image_bytes 是 bytes 类型且非空
+                        if not isinstance(image_bytes, bytes):
+                            print(f"  警告: 图像 {i} 的字节类型为 {type(image_bytes)}，尝试转换为 bytes")
+                            if hasattr(image_bytes, 'tobytes'):
+                                image_bytes = image_bytes.tobytes()
+                            else:
+                                image_bytes = bytes(image_bytes)
+
+                        if len(image_bytes) == 0:
+                            print(f"  警告: 图像 {i} 的字节数据为空")
+                            continue
+
                         image = Image.open(io.BytesIO(image_bytes))
                         if image.mode != 'RGB':
                             image = image.convert('RGB')
@@ -167,6 +206,10 @@ class VLMSampler:
                         sample_info["image_path"] = image_save_path
                     except Exception as e:
                         print(f"保存图像 {i} 失败: {e}")
+                        print(f"  图像字节类型: {type(image_bytes)}, 长度: {len(image_bytes) if hasattr(image_bytes, '__len__') else 'N/A'}")
+                        # 打印前几个字节用于调试
+                        if hasattr(image_bytes, '__len__') and len(image_bytes) > 0:
+                            print(f"  前20字节: {image_bytes[:20].hex() if hasattr(image_bytes, '__len__') else 'N/A'}")
                 
                 preview_data.append(sample_info)
 
@@ -186,7 +229,7 @@ class VLMSampler:
         print("\n=== 开始 MiniMind-V 数据流水线 ===")
         
         # 1. Pretrain 采样与预览
-        pretrain_rel = os.path.join("gongjy", "minimind-v_dataset", "pretrain_data.parquet")
+        pretrain_rel = os.path.join("gongjy", "minimind-v_dataset", "pretrain_i2t.parquet")
         pretrain_out_sub = os.path.join("vlm_pretrain", "minimind-v")
         pretrain_sample_path = self.sample_parquet(
             rel_path=pretrain_rel,
@@ -200,7 +243,7 @@ class VLMSampler:
             self.preview_parquet(pretrain_sample_path, preview_dir, num_samples=num_preview)
 
         # 2. SFT 采样与预览
-        sft_rel = os.path.join("gongjy", "minimind-v_dataset", "sft_data.parquet")
+        sft_rel = os.path.join("gongjy", "minimind-v_dataset", "sft_i2t.parquet")
         sft_out_sub = os.path.join("vlm_finetune", "minimind-v")
         sft_sample_path = self.sample_parquet(
             rel_path=sft_rel,
@@ -225,4 +268,4 @@ if __name__ == "__main__":
     sampler = VLMSampler(BASE_DATABASE_DIR, METADATA_ROOT_DIR)
     
     # 运行采样和预览
-    sampler.run_minimind_v_pipeline(target_gb=1.5, num_preview=5, split_size_mb=20)
+    sampler.run_minimind_v_pipeline(target_gb=0.1, num_preview=5, split_size_mb=20)

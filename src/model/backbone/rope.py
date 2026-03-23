@@ -55,7 +55,7 @@ class RotaryEmbedding(nn.Module):
 
 class NTKRotaryEmbedding(RotaryEmbedding):
     """
-    [演进阶段 2] NTK-Aware RoPE
+    NTK-Aware RoPE
     通过非线性插值 (调整 Base) 扩展上下文窗口，保持高频信息精度
     """
     def __init__(self, dim, max_position_embeddings=32768, base=10000, scale=1.0, device=None):
@@ -65,7 +65,7 @@ class NTKRotaryEmbedding(RotaryEmbedding):
 
 class YaRNRotaryEmbedding(RotaryEmbedding):
     """
-    [演进阶段 3] YaRN (Yet another RoPE extension)
+    YaRN (Yet another RoPE extension)
     结合 NTK-Aware 与 Attention Scaling，实现更鲁棒的长文本外推
     核心: 针对不同频率分段进行不同策略的插值与外推
     """

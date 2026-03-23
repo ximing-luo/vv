@@ -29,7 +29,7 @@ def load_model(model_dir, device='cuda' if torch.cuda.is_available() else 'cpu')
         weights_path = os.path.join(model_dir, "pytorch_model.bin")
         state_dict = torch.load(weights_path, map_location=device)
         print(f"成功加载权重: {weights_path}")
-        model.load_state_dict(state_dict)
+        model.load_state_dict(state_dict, strict=False)
         model.to(device)
         model.eval()
         print("模型加载完成。")
@@ -103,45 +103,81 @@ def run_test_suite(model, tokenizer, device, mode, input_data, output_file, test
             for _ in range(2): # 每个配置运行两次
                 stream_inference(model, tokenizer, input_data, output_file=output_file, max_new_tokens=max_new_tokens, mode=mode, device=device, temperature=temp, top_k=top_k, image_path=image_path)
 
+def run_vlm_batch_test(model, tokenizer, device, vlm_image_dir, vlm_prompts, output_file, test_configs):
+    """
+    批量测试 VLM 模型的图片理解能力，并测试不同参数配置
+    """
+    if not os.path.exists(vlm_image_dir):
+        print(f"警告: VLM 测试目录 {vlm_image_dir} 不存在")
+        return
+
+    print("\n=== 开始批量 VLM 性能测试 ===")
+    image_files = [f for f in os.listdir(vlm_image_dir) if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
+    
+    for img_name in image_files:
+        img_path = os.path.join(vlm_image_dir, img_name)
+        _smart_print(f"\n\n[VLM 测试] 图片: {img_name}", output_file)
+        for v_prompt in vlm_prompts:
+            _smart_print(f"\n>>> 提示词: {v_prompt}", output_file)
+            # 使用传入的动态测试配置，而不再是固定值
+            run_test_suite(model, tokenizer, device, 'vlm', v_prompt, output_file, test_configs, 
+                         max_new_tokens=150, image_path=img_path)
+
 def test():
     # 1. 获取模型根目录
     checkpoints_root = os.path.join(root, "models", "checkpoints")
-    test_configs = [
-        (1.3, 75, 5, True),  # 固定温度，变化 top_k
-        (1.3, 75, 0.1, False) # 固定 top_k，变化温度
+    # test_configs = [
+    #     (0.7, 30, 0.1, False),   # 低温稳定性测试：固定 top_k=30，温度从 0.7 开始递增
+    #     (1.0, 50, 10, True),     # 均衡性测试：固定温度=1.0，top_k 从 50 开始递增
+    #     (1.3, 80, -10, True)     # 高温多样性测试：固定温度=1.2，top_k 从 80 开始递减
+    # ]
+    test_configs = [(1.0, 55, 0.1, False)]
+    # 对话模式提示词：涵盖逻辑、创意和常识
+    chat_prompts = [
+        [{"role": "user", "content": "我有3个苹果，吃掉1个后又买了2箱，每箱10个，现在我一共有多少个？"}],
+        [{"role": "user", "content": "请写一段关于'赛博朋克风格的成都'的描写，要求富有画面感。"}],
+        [{"role": "user", "content": "如果人工智能有了自我意识，它第一句话会说什么？"}]
     ]
-    messages = [{"role": "user", "content": "写一篇关于人工智能对未来发展的影响的文章。"}]
-    prompt = (
-        "    “咔咔！”\n"
-        "    剧烈地疼痛从胸口处传来，叶晨勉力睁眼看去，只见眼前的世界一片血红，耳边，除了那带着几分兴奋的低沉兽吼，还有骨骼咀嚼的声音，令人毛骨悚然。\n"
-        "    要死了吗？\n"
-        "    叶晨心里有些苦涩，在末世里挣扎了十年之久，每天小心翼翼，连睡觉都是抱着兵器，稍有动静便会被惊动，今天却因为一个小小的疏忽，没有抹去猎杀三头犬时留下的气息，被这头血角兽给追踪上了。\n"
-        "    就这样感受着身体被一点点嚼碎，也许是个不错的死法？\n"
-    )
-    image = ("请描述这张图片。<image>")    
-    image_path = r".\src\data\database\gongjy\minimind-v_dataset\eval_images\彩虹瀑布-Rainbow-Falls .jpg"
-
-    model_path = os.path.join(os.path.dirname(checkpoints_root), "vv")
+    # 续写模式提示词：涵盖武侠、科幻和日常
+    pretrain_prompts = [
+        "　　方源一身残破的碧绿大袍，披头散发，浑身浴血，环顾四周。\n",
+        "随着超空间引擎的轰鸣，巨大的星舰缓缓穿过虫洞，舷窗外，原本漆黑的宇宙被扭曲成了：",
+        "清晨的阳光透过窗帘缝隙洒在桌上，咖啡的热气袅袅升起，他打开日记本，写下了第一行字："
+    ]
+    # VLM 测试：遍历 eval_images 目录下的所有图片
+    vlm_image_dir = os.path.join(root, "src", "data", "database", "gongjy", "minimind-v_dataset", "eval_images")
+    vlm_prompts = [
+        "描述这张图片的内容。<image>",
+        "图中有什么主要物体？<image>",
+        "这张图给人的感觉是怎样的？<image>"
+    ]
+    
+    model_path = os.path.join(os.path.dirname(checkpoints_root), "vv-1.3")
     model, tokenizer, device = load_model(model_path)
     with open("inference_output.txt", "w", encoding="utf-8") as output_file:
-        # # 2. 测试聊天模式
+        # 1. 测试聊天模式
         print("\n=== 测试聊天模式 ===")
-        run_test_suite(model, tokenizer, device, 'chat', messages, output_file, test_configs,
-        max_new_tokens= 300
-        )
+        for msg in chat_prompts:
+            _smart_print(f"\n>>> 测试提示词: {msg[0]['content']}", output_file)
+            run_test_suite(model, tokenizer, device, 'chat', msg, output_file, test_configs,
+            max_new_tokens=200)
 
-        # 3. 测试续写模式
+        # 2. 测试续写模式
         print("\n=== 测试续写模式 ===")
-        run_test_suite(model, tokenizer, device, 'pretrain', prompt, output_file, test_configs,
-        max_new_tokens= 512
-        )
+        test_configs = [(1.1, 45, 0.1, False)]
+        for p in pretrain_prompts:
+            _smart_print(f"\n>>> 测试提示词: {p}", output_file)
+            run_test_suite(model, tokenizer, device, 'pretrain', p, output_file, test_configs,
+            max_new_tokens=300)
 
-        # 4. vlm测试
-        print("\n=== 图片理解测试 ===")
-        run_test_suite(model, tokenizer, device, 'vlm', image, output_file, test_configs,
-        max_new_tokens= 200,
-        image_path=image_path
-        )
+        # 3. 批量 VLM 性能测试
+        # 针对 VLM 调整测试配置：步长设为非零，以便观察参数变化
+        # vlm_test_configs = [
+        #     (0.8, 40, 0.1, False),  # 变化温度：0.8 -> 0.9 -> 1.0
+        #     (0.9, 30, 20, True)     # 变化 Top-k：30 -> 50 -> 70
+        # ]
+        vlm_test_configs = [(0.9, 40, 0.1, False)]
+        run_vlm_batch_test(model, tokenizer, device, vlm_image_dir, vlm_prompts, output_file, vlm_test_configs)
 
 def main():
     print("="*30 + "\n  vv 模型推理工具\n" + "="*30)

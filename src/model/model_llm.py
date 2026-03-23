@@ -2,20 +2,19 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from .backbone.transform import StandardBlock, DeepSeekV3Block
-from .backbone.rms import RMSNorm
 
 class BaseModel(nn.Module):
     """
-    基础语言模型架构 (Evolutionary Base)
+    基础语言模型架构
     定义通用的 Causal Transformer 流程: Embedding -> Blocks -> Norm -> Head
     """
-    def __init__(self, config, block_cls=StandardBlock):
+    def __init__(self, config, block_cls=DeepSeekV3Block):
         super().__init__()
         self.config = config
         self.token_embedding_table = nn.Embedding(config.vocab_size, config.hidden_dim)
-        # 演进式架构：支持注入不同等级的 Block
+        # 支持注入不同等级的 Block
         self.blocks = nn.Sequential(*[block_cls(config) for _ in range(config.n_layer)])
-        self.norm = RMSNorm(config.hidden_dim)
+        self.norm = nn.RMSNorm(config.hidden_dim)
         self.lm_head = nn.Linear(config.hidden_dim, config.vocab_size, bias=False)
         self.lm_head.weight = self.token_embedding_table.weight # Weight Tying
         
@@ -98,6 +97,9 @@ class VV(BaseModel):
     VV (DeepSeekV3-based) 实现
     继承自 BaseModel，指定使用 DeepSeekV3Block 构建深度模型
     """
+    _keys_to_ignore_on_save = None
+    _keys_to_ignore_on_load_unexpected = None
+
     def __init__(self, config):
         super().__init__(config, block_cls=DeepSeekV3Block)
         self.apply(self._init_weights)

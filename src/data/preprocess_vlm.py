@@ -79,9 +79,16 @@ class VLMDataProcessor(DataProcessor):
                     valid_image_bytes = None
                     if image_bytes:
                         try:
-                            # 简单验证图像是否损坏，不进行任何处理
-                            Image.open(io.BytesIO(image_bytes)).verify()
-                            valid_image_bytes = image_bytes
+                            # 处理 Parquet 读取时可能的 numpy.ndarray 类型
+                            if isinstance(image_bytes, np.ndarray):
+                                if image_bytes.dtype == object and len(image_bytes) > 0:
+                                    image_bytes = image_bytes[0]
+                                else:
+                                    image_bytes = image_bytes.tobytes()
+
+                                # 简单验证图像是否损坏，不进行任何处理
+                                Image.open(io.BytesIO(image_bytes)).verify()
+                                valid_image_bytes = image_bytes
                         except Exception as e:
                             print(f"[Error] 图像已损坏: {e}")
 

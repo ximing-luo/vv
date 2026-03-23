@@ -1,110 +1,257 @@
-# 从0到VLM
+# 从 0 到 VLM 🚀
 
-手写了llm到vlm的模型和数据处理，一种演进迭代的思路，从一个最简单的llm开始（多头自注意力+前馈神经网络），数据就几本小说，训练流程手写，先跑起来再说。
+> 从零开始手写实现 LLM 到 VLM 的完整演进之路
 
-## 演进迭代
+[![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://python.org)
+[![PyTorch](https://img.shields.io/badge/PyTorch-2.6.0+-ee4c2c.svg?logo=pytorch)](https://pytorch.org)
+[![Transformers](https://img.shields.io/badge/Transformers-4.57.0+-ff9d00.svg?logo=huggingface)](https://huggingface.co/docs/transformers)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-- **自注意力层**：从单头/多头注意力(MHA)加入Flash Attention加速，替换为分组注意力GQA，最后演进为DeepSeek的低秩潜在注意力MLA。
-- **前馈网络**：从全连接层(MLP)替换到SwiGLU，再到普通MoE、共享专家MoE、带辅助损失MoE，最后实现DeepSeek的非显式辅助损失MoE。
-- **训练流程**：从纯手写训练循环迭到调用Transformers库的Trainer实现（早期手写部分已移除）。
-- **分词器**：从自实现的字符级分词器迭代为基于Hugging Face Tokenizers库的BPE分词器。
-- **多模态**：最后在LLM基础上增加视觉投影层，实现了VLM。
+从一个最简单的 LLM 开始（多头自注意力 + 前馈神经网络），通过迭代演进的方式，逐步实现 Flash Attention、GQA、DeepSeek MLA、MoE 等先进架构，最终扩展为支持多模态的 VLM。
 
-## 项目目录
+---
 
-本项目代码主要集中在模型搭建和数据处理方面：
-```text
-├── configs/
-├── logs/
-├── models/
-├── scripts/
-│   ├── train_from_scratch.py # 从0到vlm脚本（包含删除日志模型、训练分词器）
-├── src/
-│   ├── data/
-│   │   ├── database/ # 下载的数据集、小说
-│   │   ├── dataset/ # 预处理后的数据
-│   │   ├── metadata/ # 采样清洗后的数据
-│   │   ├── tools/ # 采样、清洗、词表处理
-│   │   ├── dataset.py
-│   │   ├── preprocess.py
-│   │   ├── tokenizer.py
-│   │   └── ...
-│   ├── model/
-│   │   ├── backbone/ # 自注意力层和前馈网络演进实现
-│   │   ├── model_llm.py
-│   │   └── ...
-│   ├── training/ # transformer库的Trainer实现
-│   ├── utils/ # 调用模型推理、测试
-│   └── train.py # 主训练入口
-├── .gitignore
-├── inference_output.txt # 调用模型测试的输出
-├── readme.md
-└── requirements.txt
+## ✨ 特性一览
+
+### 🔄 架构演进路线
+
+| 组件 | 演进路径 |
+|------|----------|
+| **注意力机制** | MHA → Flash Attention → GQA → DeepSeek MLA |
+| **前馈网络** | MLP → SwiGLU → MoE → 共享专家 MoE → DeepSeek 隐式辅助损失 MoE |
+| **训练流程** | 手写训练循环 → Transformers Trainer |
+| **分词器** | 字符级 → BPE (Hugging Face Tokenizers) |
+| **多模态** | LLM + 视觉投影层 → VLM |
+
+### 📦 核心模块
+
+- **`src/model/backbone/`** - 注意力机制、MoE、RoPE/YaRN、Transformer 块
+- **`src/data/`** - 数据采样、清洗、预处理、分词器训练
+- **`src/training/`** - 自定义 DynamicTrainer
+- **`src/utils/`** - 推理工具
+
+---
+
+## 🚀 快速开始
+
+### 环境要求
+
+```bash
+# 核心依赖
+torch >= 2.6.0
+transformers >= 4.57.0
+numpy >= 2.0.0
 ```
 
-## 关于复现
+### 安装依赖
 
-如果想要复现，主要面临两个门槛：
+```bash
+pip install -r requirements.txt
+```
 
-1.  **数据对齐**：数据集下载需要和我保持一致，或者你需要自己手写一套采样和预处理流程（毕竟数据是模型的粮食）。
-2.  **环境依赖**：由于采用了 `transformers` 库的 Trainer 进行训练，我使用的版本较新，顺带着 `numpy` 和 `torch` 的版本要求也水涨船高。所以不建议在 `torch < 2.6.0` 或 `numpy < 2.0.0` 的环境下强行复现。
+### 一键训练（从 0 到 VLM）
 
-> 后面看情况，我可能会出一个在服务器上复现的教程，直接选用 `pytorch >= 2.6.0` 的镜像，复现起来基本没有什么依赖冲突。
+```bash
+python scripts/train_from_scratch.py
+```
 
-如果你对手写模型训练代码感兴趣，强烈建议看看以下优秀项目：
+> ⚠️ **警告**：此脚本会删除 `logs/`、`models/` 和已处理的数据。如需保留数据，请注释掉 `delete_data()` 调用。
+
+---
+
+## 📁 项目结构
+
+```
+vv/
+├── configs/
+│   └── model.py              # 模型配置 (VVConfig, VisualVVConfig)
+├── scripts/
+│   └── train_from_scratch.py # 完整训练流水线
+├── src/
+│   ├── data/
+│   │   ├── database/         # 原始数据集 (git-ignored)
+│   │   ├── dataset/          # 预处理数据 (git-ignored)
+│   │   ├── metadata/         # 采样清洗数据 (git-ignored)
+│   │   ├── tools/            # 数据工具
+│   │   ├── dataset.py
+│   │   ├── preprocess.py
+│   │   ├── preprocess_vlm.py
+│   │   └── tokenizer.py
+│   ├── model/
+│   │   ├── backbone/
+│   │   │   ├── attention.py  # MHA/GQA/MLA
+│   │   │   ├── moe.py        # SparseMoE/HybridMoE
+│   │   │   ├── rope.py       # RoPE/YaRN
+│   │   │   ├── transform.py  # Transformer 块
+│   │   │   └── vision.py     # 视觉编码器
+│   │   ├── model_llm.py
+│   │   └── model_vlm.py
+│   ├── training/             # 自定义 Trainer
+│   ├── utils/                # 推理工具
+│   └── train.py              # 训练入口
+├── tests/                    # 单元测试
+├── models/                   # 模型输出 (git-ignored)
+├── logs/                     # TensorBoard 日志 (git-ignored)
+├── requirements.txt
+└── readme.md
+```
+
+---
+
+## 📊 训练流程
+
+### 四阶段训练
+
+```mermaid
+graph LR
+    A[LLM 预训练] --> B[LLM 微调]
+    B --> C[VLM 预训练]
+    C --> D[VLM 微调]
+```
+
+| 阶段 | 模式 | 说明 |
+|------|------|------|
+| 1 | `pretrain`, `is_vlm=False` | LLM 预训练（从头开始） |
+| 2 | `finetune`, `is_vlm=False` | LLM 微调（加载阶段 1 权重） |
+| 3 | `pretrain`, `is_vlm=True` | VLM 预训练（冻结 LLM） |
+| 4 | `finetune`, `is_vlm=True` | VLM 微调（解冻全部参数） |
+
+### 单阶段训练
+
+```python
+from src.train import train
+
+# LLM 预训练
+train(mode='pretrain', is_vlm=False, num_train_epochs=1, eval_steps=500, save_steps=500)
+
+# LLM 微调
+train(mode='finetune', is_vlm=False, num_train_epochs=1, eval_steps=500, save_steps=500)
+
+# VLM 预训练
+train(mode='pretrain', is_vlm=True, num_train_epochs=1, eval_steps=500, save_steps=500)
+
+# VLM 微调
+train(mode='finetune', is_vlm=True, num_train_epochs=1, eval_steps=500, save_steps=500)
+```
+
+### 监控训练
+
+```bash
+tensorboard --logdir logs
+```
+
+---
+
+## 📥 数据集准备
+
+### 推荐数据集
+
+**Minimind 数据集**（数据量适中，推荐入门）：
+
+```bash
+pip install modelscope
+
+# 预训练数据
+modelscope download --dataset gongjy/minimind_dataset pretrain_hq.jsonl --local_dir ./src/data/database/
+
+# SFT 数据
+modelscope download --dataset gongjy/minimind_dataset sft_512.jsonl --local_dir ./src/data/database/
+```
+
+**Minimind-V 数据集**（VLM 部分）：
+
+```bash
+modelscope download --dataset gongjy/minimind-v_dataset files --local_dir ./src/data/database/
+```
+
+### 一键下载脚本
+
+```bash
+python src/data/tools/download_dataset.py
+```
+
+### 其他数据集来源
+
+| 数据集 | 链接 |
+|--------|------|
+| 流萤指令微调 | [Firefly Train 1.1M](https://huggingface.co/datasets/YeungNLP/firefly-train-1.1M) |
+| 多轮对话 | [Multiturn Chat 0.8M](https://huggingface.co/datasets/erhwenkuo/multiturn_chat_0.8m-chinese-zhtw) |
+| WuDao | [High Data](https://huggingface.co/datasets/mdokl/WuDaoCorpora2.0-RefinedEdition60GTXT) |
+
+---
+
+## 🔧 常见问题
+
+### CUDA 错误调试
+
+```bash
+export CUDA_LAUNCH_BLOCKING=1
+export TORCH_USE_CUDA_DSA=1
+```
+
+### 显存优化
+
+项目已配置显存优化：
+```bash
+export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
+```
+
+### BF16 支持
+
+- **Ampere+ (compute capability >= 8)**: 自动启用 BF16
+- **旧架构**: 使用 FP16
+
+---
+
+## 📚 模型配置
+
+### VVConfig 核心参数
+
+```python
+@dataclass
+class VVConfig:
+    vocab_size: int = None
+    hidden_dim: int = 576
+    n_layer: int = 12
+    n_head: int = 6
+    n_kv_head: int = 3          # GQA/MLA
+    max_seq_len: int = 512
+    
+    # MLA 配置
+    kv_lora_rank: int = 128
+    q_lora_rank: int = 96
+    qk_rope_head_dim: int = 32
+    
+    # MoE 配置
+    num_experts: int = 4
+    num_experts_per_tok: int = 1
+    num_shared_experts: int = 1
+    
+    # RoPE/YaRN
+    rope_base: float = 10000.0
+    rope_scale: float = 1.0
+```
+
+---
+
+## 🙏 致谢
+
+感谢以下优秀项目的启发：
+
 - [LLMs-Zero-to-Hero](https://github.com/bbruceyuan/LLMs-Zero-to-Hero)
 - [Minimind](https://github.com/jingyaogong/minimind)
 - [My_LLM](https://github.com/REXWindW/my_llm)
 
-## 数据集下载
+---
 
-如果你看到这里还是对本项目感兴趣，欢迎下载我用到的数据集到 `src/data/database/` 目录下，亲自体验从 0 训练 VLM 的感觉。
+## 📄 许可证
 
-### 项目数据结构
+MIT License
 
-```text
-data
-├── database
-│   ├── gongjy                    # minimind-v 的数据集
-│   ├── novel                     # 小说数据集（这个可以自己随便找几本）
-│   ├── firefly-train-1.1M.jsonl  # 流萤指令微调数据集
-│   ├── high_data.txt             # wudao 数据集
-│   ├── multiturn_chat_0.8M.json  # 多轮对话数据集
-│   ├── pretrain_hq.jsonl         # minimind 的预训练数据集
-│   └── sft_512.jsonl             # minimind 的 SFT 数据集
-├── dataset
-│   ├── data_llm                  # 预处理后的 LLM 数据集
-│   ├── data_vlm                  # 预处理后的 VLM 数据集
-│   └── tokenizer                 # 分词器
-└── metadata                      # 从 database 采样清洗后的数据
-    ├── finetune
-    ├── pretrain
-    ├── vlm_finetune
-    └── vlm_pretrain
-```
+---
 
-### 下载指引
+<div align="center">
 
-建议直接下载 **Minimind** 的数据集，数据量适中：
-[Minimind Dataset Files](https://www.modelscope.cn/datasets/gongjy/minimind_dataset/files)
+**如果这个项目对你有帮助，欢迎给一个 ⭐️ Star！**
 
-您可以使用 `modelscope` SDK 轻松下载：
-
-```bash
-pip install modelscope
-# 下载预训练数据
-modelscope download --dataset gongjy/minimind_dataset pretrain_hq.jsonl --local_dir ./src/data/database/
-# 下载 SFT 数据
-modelscope download --dataset gongjy/minimind_dataset sft_512.jsonl --local_dir ./src/data/database/
-```
-
-关于 **Minimind-V** 的数据集（VLM 部分）：
-[Minimind-V Dataset Files](https://www.modelscope.cn/datasets/gongjy/minimind-v_dataset/files)
-
-我也正在尝试用 SDK 标准化一键下载流程。目前您可以使用脚本 `src\data\tools\download_dataset.py` 将其一键下载到对应目录。后续我会继续优化，争取让所有数据集都能通过 SDK 一键搞定。
-
-### 其他数据集
-
-- **流萤指令微调数据集**：[Firefly Train 1.1M](https://huggingface.co/datasets/YeungNLP/firefly-train-1.1M)
-- **多轮对话数据集**：[Multiturn Chat 0.8M](https://huggingface.co/datasets/erhwenkuo/multiturn_chat_0.8m-chinese-zhtw)
-- **WuDao 数据集**：[High Data](https://huggingface.co/datasets/mdokl/WuDaoCorpora2.0-RefinedEdition60GTXT)
+</div>
