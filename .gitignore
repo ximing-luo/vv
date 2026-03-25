@@ -3,10 +3,10 @@ __pycache__/
 .trae
 logs
 models
-src/data/database
 src/data/dataset
+src/data/database
 src/data/metadata
 tests
 log.md
-inference_output.txt
 pyrightconfig.json
+/inference_output.txt

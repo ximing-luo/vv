@@ -32,7 +32,16 @@
 
 ---
 
-## 🚀 快速开始
+## � 演示与测试
+
+- **B站演示视频**：[从0到VLM：模型演进与训练实录](https://www.bilibili.com/video/BV1mSzcBLECy?t=37.8)
+- **测试推理输出**：详见测试文档 [inference_output.txt](doc/inference_output.txt)
+- **测试过程截图**：
+  ![测试过程](doc/image.png)
+
+---
+
+## � 快速开始
 
 ### 环境要求
 
@@ -90,6 +99,9 @@ vv/
 │   ├── utils/                # 推理工具
 │   └── train.py              # 训练入口
 ├── tests/                    # 单元测试
+├── doc/                      # 测试过程截图与输出
+│   ├── image.png
+│   └── inference_output.txt
 ├── models/                   # 模型输出 (git-ignored)
 ├── logs/                     # TensorBoard 日志 (git-ignored)
 ├── requirements.txt
